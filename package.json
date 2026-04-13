@@ -2,7 +2,7 @@
   "name": "theo-pi",
   "version": "0.1.0",
   "private": true,
-  "description": "Monorepo of Pi packages, currently including pi-auto-skills for Hermes-style autonomous skill creation.",
+  "description": "Monorepo of Pi packages, including pi-auto-skills and pi-caveman.",
   "author": "Theo",
   "license": "MIT",
   "type": "module",
@@ -19,6 +19,7 @@
     "pi",
     "pi-coding-agent",
     "skills",
+    "extensions",
     "autonomous-agents",
     "procedural-memory"
   ],
@@ -27,7 +28,8 @@
   ],
   "pi": {
     "extensions": [
-      "./packages/pi-auto-skills/extensions/auto-skills.ts"
+      "./packages/pi-auto-skills/extensions/auto-skills.ts",
+      "./packages/pi-caveman/extensions/caveman.ts"
     ]
   }
 }
