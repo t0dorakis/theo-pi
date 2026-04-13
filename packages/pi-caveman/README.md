@@ -41,9 +41,27 @@ If Pi is already running:
 /reload
 ```
 
+## Install global system prompt starter
+
+For a fresh Pi agent or machine, copy the packaged prompt starter into your global Pi config:
+
+```bash
+mkdir -p ~/.pi/agent
+cp /Users/theo/repos/theo-pi/packages/pi-caveman/APPEND_SYSTEM.md ~/.pi/agent/APPEND_SYSTEM.md
+```
+
+Then start Pi or reload it:
+
+```text
+/reload
+```
+
+This file is intentionally short. It tells Pi to activate the installed `pi-caveman` skill, while the real behavior stays in `SKILL.md`.
+
 ## Files
 
 - `SKILL.md` — canonical caveman full-mode rules
+- `APPEND_SYSTEM.md` — minimal global system prompt starter for fresh Pi installs
 - `extensions/caveman.ts` — before_agent_start loader for the skill
 
 ## Notes

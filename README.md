@@ -81,6 +81,7 @@ find ~/.agents/skills/auto -maxdepth 2 -name SKILL.md
 ## What `pi-caveman` does
 
 - activates caveman full mode by loading canonical `packages/pi-caveman/SKILL.md`
+- includes a reusable `packages/pi-caveman/APPEND_SYSTEM.md` starter for fresh Pi installs
 - keeps code blocks, commands, file paths, and exact error text unchanged
 - stays intentionally minimal: only full mode, no lite/ultra toggles
 
@@ -113,4 +114,11 @@ Smoke-load the caveman extension module:
 ```bash
 cd /Users/theo/repos/theo-pi
 npx tsx packages/pi-caveman/extensions/caveman.ts
+```
+
+Install the packaged global prompt starter for a fresh Pi agent:
+
+```bash
+mkdir -p ~/.pi/agent
+cp /Users/theo/repos/theo-pi/packages/pi-caveman/APPEND_SYSTEM.md ~/.pi/agent/APPEND_SYSTEM.md
 ```
