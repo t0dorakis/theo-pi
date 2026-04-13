@@ -3,9 +3,9 @@
 Hermes-style auto skill creation for Pi.
 
 ## Features
+- autonomous skill creation for reusable workflows Pi discovers during work
 - `auto_skill_manage` tool for creating, patching, and writing supporting files for auto-managed skills
-- `/autoskill-now` command to force capture of the current workflow
-- prompt guidance nudging the agent to save reusable procedures as skills
+- prompt guidance plus a Hermes-inspired review loop for capturing reusable procedures
 - writes only to `~/.agents/skills/auto/` (including optional files under `references/`, `templates/`, `scripts/`, and `assets/`)
 - auto-queues a runtime reload after skill changes so new skills are picked up quickly
 - line-trimmed patch fallback for indentation/whitespace drift
@@ -13,11 +13,51 @@ Hermes-style auto skill creation for Pi.
 
 ## Install
 
+### Easiest: from GitHub
+
 ```bash
-pi install /absolute/path/to/pi-auto-skills
+pi install https://github.com/t0dorakis/theo-pi
 ```
 
-Or add to Pi settings as a local package.
+The repo root is configured as a Pi package and currently installs `pi-auto-skills`.
+
+### From a local checkout
+
+```bash
+pi install /absolute/path/to/theo-pi
+```
+
+Example:
+
+```bash
+pi install /Users/theo/repos/theo-pi
+```
+
+You can also install the package directory directly if you prefer:
+
+```bash
+pi install /absolute/path/to/theo-pi/packages/pi-auto-skills
+```
+
+If Pi is already running, reload resources after updates:
+
+```text
+/reload
+```
+
+## Usage
+
+Once installed, `pi-auto-skills` adds:
+
+- autonomous capture of reusable workflows into auto-managed skills
+- `auto_skill_manage` tool
+- stronger prompt guidance and post-task review for capturing reusable workflows
+
+Auto-generated skills are written to:
+
+```bash
+~/.agents/skills/auto/
+```
 
 ## Manual smoke test
 
@@ -27,12 +67,7 @@ Or add to Pi settings as a local package.
 pi install /Users/theo/repos/theo-pi/packages/pi-auto-skills
 ```
 
-2. Start Pi in any repo and complete a small multi-step task, or force capture with:
-
-```text
-/autoskill-now
-```
-
+2. Start Pi in any repo and complete a small multi-step task.
 3. Verify a skill was written under:
 
 ```bash
@@ -49,6 +84,14 @@ rg -n "source: pi-auto|created_by: pi-auto-skills|updated_at:" ~/.agents/skills/
 5. Confirm Pi reload picked it up:
 - use `/reload` manually if needed
 - then trigger the skill directly with `/skill:<name>` if Pi has discovered it
+
+## Manual override
+
+If you want to force immediate capture of the current workflow, the package also provides:
+
+```text
+/autoskill-now
+```
 
 ## Tests
 

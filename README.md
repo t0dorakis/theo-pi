@@ -1,3 +1,94 @@
 # theo-pi
 
 Monorepo for Pi packages and extensions.
+
+## Packages
+
+### `pi-auto-skills`
+Hermes-style autonomous skill creation for Pi.
+
+Location:
+- `packages/pi-auto-skills`
+
+## Prerequisites
+
+- [Pi](https://pi.dev) installed
+- Node.js available for package dependencies/tests
+
+## Install `pi-auto-skills`
+
+### Easiest: install from GitHub
+
+```bash
+pi install https://github.com/t0dorakis/theo-pi
+```
+
+The repo root is configured as a Pi package and currently installs `pi-auto-skills`.
+
+### From a local checkout
+
+```bash
+pi install /absolute/path/to/theo-pi
+```
+
+Example:
+
+```bash
+pi install /Users/theo/repos/theo-pi
+```
+
+You can still install the package directory directly if you prefer:
+
+```bash
+pi install /absolute/path/to/theo-pi/packages/pi-auto-skills
+```
+
+If you already installed it and want Pi to pick up local changes in a running session, use:
+
+```text
+/reload
+```
+
+## What `pi-auto-skills` does
+
+- gives Pi autonomous procedural memory for reusable workflows
+- nudges Pi to save and refine reusable workflows as skills
+- stores auto-generated skills in `~/.agents/skills/auto/`
+- can create, patch, and write supporting files for auto-managed skills
+- keeps a manual override available if you ever want to force skill capture
+
+## Verify installation
+
+After installing, you can:
+
+1. Start Pi in any repo
+2. Run a realistic multi-step task
+3. Check generated skills:
+
+```bash
+find ~/.agents/skills/auto -maxdepth 2 -name SKILL.md
+```
+
+## Manual override
+
+If you ever want to force immediate capture of the current workflow, the package also provides:
+
+```text
+/autoskill-now
+```
+
+## Development
+
+Install workspace dependencies:
+
+```bash
+cd /Users/theo/repos/theo-pi
+npm install
+```
+
+Run package tests:
+
+```bash
+cd /Users/theo/repos/theo-pi/packages/pi-auto-skills
+npm test
+```

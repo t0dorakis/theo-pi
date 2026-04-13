@@ -1,7 +1,33 @@
 {
   "name": "theo-pi",
+  "version": "0.1.0",
   "private": true,
+  "description": "Monorepo of Pi packages, currently including pi-auto-skills for Hermes-style autonomous skill creation.",
+  "author": "Theo",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t0dorakis/theo-pi.git"
+  },
+  "homepage": "https://github.com/t0dorakis/theo-pi#readme",
+  "bugs": {
+    "url": "https://github.com/t0dorakis/theo-pi/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "skills",
+    "autonomous-agents",
+    "procedural-memory"
+  ],
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "pi": {
+    "extensions": [
+      "./packages/pi-auto-skills/extensions/auto-skills.ts"
+    ]
+  }
 }
