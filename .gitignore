@@ -2,3 +2,23 @@ node_modules/
 packages/*/node_modules/
 *.log
 .DS_Store
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+!.env.pi.example
+.env.pi
+
+# Local agent state
+.pi/
+.agents/
+auth.json
+
+# Local databases / keys
+*.db
+*.sqlite
+*.sqlite3
+*.pem
+*.key
+*.p12

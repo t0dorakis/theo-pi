@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+pass() { printf '[pass] %s\n' "$1"; }
+fail() { printf '[fail] %s\n' "$1"; exit 1; }
+check() { command -v "$1" >/dev/null 2>&1 || fail "$1 missing"; pass "$1 present"; }
+
+check ssh
+check git
+check tmux
+check rg
+check jq
+check node
+check npm
+check pi
+
+[[ -d "$HOME/workspaces" ]] || fail "~/workspaces missing"
+pass "~/workspaces exists"
+
+[[ -d "$HOME/.pi/agent" ]] || fail "~/.pi/agent missing"
+pass "~/.pi/agent exists"
+
+[[ -f "$HOME/.pi/agent/settings.json" ]] || fail "~/.pi/agent/settings.json missing"
+pass "settings.json exists"
+
+if grep -q 'pi-caveman' "$HOME/.pi/agent/settings.json"; then
+  pass "pi-caveman configured"
+else
+  fail "pi-caveman not configured"
+fi
+
+if grep -q 'pi-auto-skills' "$HOME/.pi/agent/settings.json"; then
+  pass "pi-auto-skills configured"
+else
+  fail "pi-auto-skills not configured"
+fi
+
+if tmux ls >/dev/null 2>&1; then
+  pass "tmux reachable"
+else
+  printf '[info] no tmux sessions yet\n'
+fi
+
+printf '\nManual checks still needed:\n'
+printf ' - SSH reconnect from remote client\n'
+printf ' - Tailscale connectivity\n'
+printf ' - Pi tool use inside real repo\n'
+printf ' - VM snapshot after clean setup\n'

@@ -351,12 +351,17 @@ export function shouldTriggerAutoSkillReview(signals: ReviewSignals) {
 export function buildAutoSkillReviewPrompt() {
   return [
     REVIEW_MARKER,
-    "Review the immediately preceding task and decide whether a reusable auto-managed skill should be created or patched.",
+    "Review the immediately preceding task and consider saving or updating an auto-managed skill if appropriate.",
     "",
-    "Create or patch a skill only if:",
-    "- the task involved a non-trivial workflow,",
-    "- or required trial-and-error or recovery,",
-    "- or produced a reusable procedure likely to help in future sessions.",
+    "Focus on whether a non-trivial approach was used to complete the task that required:",
+    "- trial and error,",
+    "- recovery from mistakes or dead ends,",
+    "- changing course due to experiential findings along the way,",
+    "- or learning a durable method that would likely help in future sessions.",
+    "",
+    "Only act if something is genuinely worth saving as procedural memory.",
+    "Do not save minor setup, install, reload, symlink, docs-only, or one-off housekeeping tasks just because they used several tool calls.",
+    "A task is not worth saving merely because it was multi-step.",
     "",
     "Prefer patching an existing relevant auto skill over creating a duplicate.",
     "Write only to ~/.agents/skills/auto/ via auto_skill_manage.",
@@ -367,8 +372,8 @@ export function buildAutoSkillReviewPrompt() {
     "- include pitfalls and verification steps actually learned from the task",
     "- avoid generic names like 'prompt-created-auto-skill'",
     "",
-    "If no durable reusable workflow was learned, do nothing and reply exactly:",
-    "Nothing to save.",
+    "If nothing is genuinely worth saving, reply exactly with a single period:",
+    ".",
     REVIEW_MARKER,
   ].join("\n");
 }

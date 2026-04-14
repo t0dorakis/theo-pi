@@ -1,0 +1,25 @@
+#cloud-config
+users:
+  - default
+  - name: piagent
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      # Replace before use. Example:
+      # - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... your-key-comment
+      - ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY pi-worker
+package_update: true
+packages:
+  - openssh-server
+  - git
+  - tmux
+  - curl
+  - jq
+  - ripgrep
+  - fd-find
+runcmd:
+  - systemctl enable ssh || true
+  - systemctl restart ssh || true
+  - mkdir -p /home/piagent/workspaces /home/piagent/.pi/agent /home/piagent/.agents/skills /home/piagent/logs
+  - chown -R piagent:piagent /home/piagent

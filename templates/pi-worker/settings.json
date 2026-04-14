@@ -1,0 +1,7 @@
+{
+  "packages": [
+    "../../workspaces/theo-pi/packages/pi-auto-skills",
+    "../../workspaces/theo-pi/packages/pi-caveman",
+    "npm:pi-web-access"
+  ]
+}

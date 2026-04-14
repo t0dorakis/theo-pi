@@ -200,11 +200,14 @@ test("shouldTriggerAutoSkillReview stays false once autoskill tool was already u
   );
 });
 
-test("buildAutoSkillReviewPrompt includes review marker and save instruction", () => {
+test("buildAutoSkillReviewPrompt includes review marker and conservative save instruction", () => {
   const prompt = buildAutoSkillReviewPrompt();
   assert.match(prompt, new RegExp(REVIEW_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(prompt, /Nothing to save\./);
+  assert.match(prompt, /reply exactly with a single period/);
+  assert.match(prompt, /\n\.\n/);
   assert.match(prompt, /auto_skill_manage/);
+  assert.match(prompt, /Only act if something is genuinely worth saving/);
+  assert.match(prompt, /Do not save minor setup, install, reload, symlink, docs-only, or one-off housekeeping tasks/);
 });
 
 test("extractLatestReviewLedger returns latest persisted review entry", () => {

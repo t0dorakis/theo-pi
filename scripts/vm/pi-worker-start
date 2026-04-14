@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SESSION_NAME="${1:-}"
+WORKDIR="${2:-}"
+
+if [[ -z "$SESSION_NAME" || -z "$WORKDIR" ]]; then
+  echo "usage: pi-worker-start <session-name> <workdir>"
+  exit 1
+fi
+
+if [[ ! -d "$WORKDIR" ]]; then
+  echo "workdir not found: $WORKDIR"
+  exit 1
+fi
+
+if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+  echo "session exists: $SESSION_NAME"
+  exit 0
+fi
+
+tmux new-session -d -s "$SESSION_NAME" "cd '$WORKDIR' && if [[ -f \"$HOME/.env.pi\" ]]; then source \"$HOME/.env.pi\"; fi && pi"
+echo "started $SESSION_NAME in $WORKDIR"

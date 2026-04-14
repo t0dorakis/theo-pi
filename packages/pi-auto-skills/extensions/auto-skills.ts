@@ -237,19 +237,20 @@ export default function autoSkillsExtension(pi: ExtensionAPI) {
 
   pi.on("before_agent_start", async (event) => {
     const promptText = extractPromptText(event.prompt);
-    const reviewTurn = isReviewPrompt(promptText);
+    const reviewTurn = isReviewPrompt(promptText) || state.phase === "review_queued";
 
     if (!reviewTurn) {
       resetRunState(state, promptText);
     } else {
       state.inReviewTurn = true;
+      state.reviewQueued = false;
       state.phase = "review_running";
     }
 
-    const baseGuidance = `\n\n## Auto Skills\n\nAfter completing a complex task (especially 5+ tool calls), fixing a tricky error, or discovering a reusable workflow, you must consider whether to save or patch an auto-managed skill with auto_skill_manage.\n\n- Skills are procedural memory: save how to do something, not facts or temporary task state.\n- Prefer patching an existing auto skill when you discover missing pitfalls, verification steps, or corrections.\n- Do not wait to be asked if the workflow would help in a future session.\n- Skip simple one-off tasks.\n- Good skills include: when to use, numbered steps, exact commands when possible, pitfalls, and verification steps.\n- Auto-managed skills live only in ~/.agents/skills/auto/.\n`;
+    const baseGuidance = `\n\n## Auto Skills\n\nAfter completing a complex task, fixing a tricky error, or discovering a reusable workflow, you must consider whether to save or patch an auto-managed skill with auto_skill_manage.\n\n- Skills are procedural memory: save how to do something, not facts or temporary task state.\n- Prefer patching an existing auto skill when you discover missing pitfalls, verification steps, or corrections.\n- Only save when something genuinely stands out as durable method learning.\n- Do not save minor setup, install, reload, symlink, docs-only, or one-off housekeeping tasks merely because they were multi-step.\n- Good skills include: when to use, numbered steps, exact commands when possible, pitfalls, and verification steps.\n- Auto-managed skills live only in ~/.agents/skills/auto/.\n`;
 
     const reviewGuidance = reviewTurn
-      ? `\n\n## Auto Skill Review Turn\n\nThis is an internal reflection turn. Either create or patch a reusable auto-managed skill with auto_skill_manage, or reply exactly 'Nothing to save.' if the prior task produced no durable procedural learning.\n`
+      ? `\n\n## Auto Skill Review Turn\n\nThis is an internal reflection turn. Only create or patch a reusable auto-managed skill with auto_skill_manage if the prior task produced genuine durable procedural learning from trial-and-error, recovery, course correction, or a clearly reusable method. Otherwise reply exactly with a single period '.'.\n`
       : "";
 
     return {
@@ -286,7 +287,7 @@ export default function autoSkillsExtension(pi: ExtensionAPI) {
         .map((part: { text?: string }) => part.text ?? "")
         .join("\n")
         .trim();
-      if (text && text !== "Nothing to save.") state.meaningfulAssistantTurns += 1;
+      if (text && text !== "Nothing to save." && text !== ".") state.meaningfulAssistantTurns += 1;
     }
   });
 
@@ -336,7 +337,17 @@ export default function autoSkillsExtension(pi: ExtensionAPI) {
     state.phase = "review_queued";
     state.reviewQueued = true;
     persistReviewState(pi, state);
-    pi.sendUserMessage(buildAutoSkillReviewPrompt(), { deliverAs: "followUp" });
+    pi.sendMessage(
+      {
+        customType: "auto-skills-review",
+        content: buildAutoSkillReviewPrompt(),
+        display: false,
+      },
+      {
+        deliverAs: "followUp",
+        triggerTurn: true,
+      },
+    );
   });
 
   pi.on("session_before_compact", async () => {

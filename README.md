@@ -93,6 +93,17 @@ If you ever want to force immediate capture of the current workflow, the package
 /autoskill-now
 ```
 
+## Personal Pi worker VM artifacts
+
+For Theo's local Linux VM worker setup, repo includes:
+
+- `scripts/vm/bootstrap-ubuntu-pi-worker.sh` — base Ubuntu packages + Node + Pi + directories
+- `scripts/vm/install-theo-pi-worker.sh` — clone/update repo in guest and configure Pi packages
+- `scripts/vm/pi-worker-start` — start Pi in named `tmux` session
+- `scripts/vm/pi-worker-verify.sh` — verify guest worker prerequisites/config
+- `templates/pi-worker/` — starter `settings.json`, `.env`, and SSH hardening snippets
+- `docs/plans/2026-04-14-personal-autonomous-pi-worker-bootstrap-checklist.md` — step-by-step bootstrap checklist
+
 ## Development
 
 Install workspace dependencies:
