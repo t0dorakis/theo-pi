@@ -6,11 +6,45 @@ This design is for a personal, always-on Pi worker that runs on Theo’s MacBook
 
 The key constraint is that the MacBook Air is both a development machine and the physical host. Running Pi directly on macOS would be simpler, but it would give the agent broad access to Theo’s normal user environment, secrets, and files. A container-only approach would improve isolation somewhat, but it would still be a less natural fit for full-shell coding-agent workflows and would diverge more from the likely future server setup. Because the next step is expected to be a real server, the best choice is to adopt the target operating model now: run Pi inside a dedicated Linux VM.
 
-The selected architecture is therefore: macOS host → local Linux VM → SSH + tmux → pi-coding-agent. The Linux VM becomes the agent machine. It owns the workspace, Pi config, sessions, tools, and credentials required for agent work. The host machine only provides compute, storage, and VM lifecycle. Remote access will be SSH-first, ideally over Tailscale, so Theo can reconnect to the worker safely from anywhere.
+The selected architecture is therefore: macOS host → local Linux VM → SSH + tmux → supervised Pi runtime. The Linux VM becomes the agent machine. It owns the workspace, Pi config, sessions, tools, and credentials required for agent work. The host machine only provides compute, storage, and VM lifecycle. Remote access will be SSH-first, ideally over Tailscale, so Theo can reconnect to the worker safely from anywhere.
+
+Inside the VM, the runtime should be treated as layered rather than monolithic. The intended internal topology is:
+
+```text
+Theo/operator -> SSH/tmux -> supervisor -> Pi runtime -> workspace execution
+```
+
+This layer model is informed by two external references. Open Agents is useful because it explicitly separates control plane, agent runtime, and execution environment rather than collapsing them into one box. ClawRun is useful because it treats runtime liveness as a supervised concern, with health checks, heartbeat behavior, and restart logic outside the agent itself. The worker should import both lessons without copying either product whole.
 
 ## 2. Runtime Topology and Remote Access Model
 
 The VM should be treated as a single-purpose coding-agent worker. Inside the VM, Pi runs in one or more `tmux` sessions, each tied to a specific project workspace. This keeps the agent interactive, inspectable, and resumable, while avoiding the fragility of trying to turn Pi into a hidden background daemon too early. `tmux` is the primary persistence layer for active agent processes; Pi’s own session files remain the persistence layer for conversation history and branch state.
+
+Within that operator-visible model, the worker should still distinguish four runtime layers:
+
+1. **Operator layer**
+   - SSH access
+   - `tmux` sessions
+   - helper scripts
+   - manual inspection and restart procedures
+
+2. **Supervisor layer**
+   - starts Pi in the intended session/workspace
+   - tracks liveness and basic health
+   - records heartbeat and restart state
+   - restarts Pi when it crashes or wedges in obvious ways
+
+3. **Pi runtime layer**
+   - `pi-coding-agent`
+   - installed Pi packages and extensions
+   - sessions, prompts, skills, and runtime config
+
+4. **Workspace execution layer**
+   - bounded project directories under `~/workspaces`
+   - git repositories and task artifacts
+   - future optional per-task sandboxes or containers
+
+The worker should not assume that “Pi runtime” and “work target” are conceptually the same layer forever, even if the first implementation keeps both inside one Linux VM.
 
 The remote access model is SSH-first. Theo connects to the VM over a private network path rather than exposing any public Pi or web endpoint. Tailscale is the preferred transport because it reduces router and firewall complexity, gives stable private addressing, and can support either ordinary SSH or Tailscale SSH. A normal SSH path should remain available as a fallback so the design does not become dependent on one vendor or one connectivity mode.
 
@@ -26,11 +60,17 @@ The security goal is not perfect containment; it is controlled failure. If Pi mi
 
 ## 4. Reliability, Unattended Operation, and Recovery
 
-The worker must be able to survive ordinary unattended conditions: Theo closes the laptop lid, network drops temporarily, SSH disconnects, or Pi is left running for hours. The design should therefore separate three concerns clearly. First, VM lifecycle must be stable enough that the Linux guest resumes correctly after host sleep and reconnect. Second, `tmux` must preserve active terminal processes so Pi does not die when Theo’s client disconnects. Third, Pi’s own session files must preserve conversation state so a crashed or restarted process can resume meaningful history rather than starting from nothing.
+The worker must be able to survive ordinary unattended conditions: Theo closes the laptop lid, network drops temporarily, SSH disconnects, or Pi is left running for hours. The design should therefore separate four concerns clearly. First, VM lifecycle must be stable enough that the Linux guest resumes correctly after host sleep and reconnect. Second, the supervisor layer must make Pi’s liveness and restart state explicit rather than relying on operator guesswork. Third, `tmux` must preserve active terminal processes so Pi does not die when Theo’s client disconnects. Fourth, Pi’s own session files must preserve conversation state so a crashed or restarted process can resume meaningful history rather than starting from nothing.
 
-For unattended use, the first milestone should be simple and robust: manually launched VM, Pi running in named `tmux` sessions, and explicit reconnect procedures. Only after that works reliably should the design add automation such as VM auto-start, login-time `tmux` launchers, or service wrappers. Reliability should be earned incrementally, not assumed from added complexity.
+For unattended use, the first milestone should be simple and robust: manually launched VM, Pi running in named `tmux` sessions, and explicit reconnect procedures. The next milestone should add a lightweight supervisor, health output, and heartbeat markers before any attempt at rich external gateways. Only after that works reliably should the design add heavier automation such as VM auto-start, login-time `tmux` launchers, or more daemon-like wrappers. Reliability should be earned incrementally, not assumed from added complexity.
 
-Recovery should also be simple. If Pi wedges, Theo should be able to SSH in, inspect `tmux`, kill the stuck process, and restart Pi in the same workspace. If the VM itself becomes unhealthy, the correct response is to stop the worker, restore from a clean snapshot or backup, and resume from git state plus Pi session artifacts where useful. The system should favor restartability over trying to keep every process immortal.
+Recovery should also be simple. If Pi wedges, Theo should be able to SSH in, inspect `tmux`, inspect supervisor health state, kill the stuck process, and restart Pi in the same workspace. If the VM itself becomes unhealthy, the correct response is to stop the worker, restore from a clean snapshot or backup, and resume from git state plus Pi session artifacts where useful. The system should favor restartability over trying to keep every process immortal.
+
+The worker should also move toward explicit checkpointing rather than vague continuity. At minimum there should eventually be:
+
+- a baseline VM snapshot after clean bootstrap
+- a worker-runtime checkpoint before risky self-updates
+- a workspace-level checkpoint via git state or task snapshot before risky autonomous changes
 
 ## 5. Implementation Phases and Immediate Next Steps
 

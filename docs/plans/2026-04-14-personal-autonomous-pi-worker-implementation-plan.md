@@ -252,7 +252,61 @@ Success criteria:
 
 ---
 
-## Phase 5 — Credentials and Secrets
+## Phase 5 — Runtime Supervision and Observability
+
+### Goal
+Add a lightweight supervisor layer on top of the SSH + `tmux` workflow so the worker has explicit liveness, restart, heartbeat, and health state instead of relying on manual observation alone.
+
+### Minimum responsibilities
+The first supervisor version should:
+- start Pi in a named session/workspace
+- detect obvious process failure
+- record restart count and last-known-good state
+- write a heartbeat marker
+- expose a simple status command or JSON health output
+- write logs to a known location
+
+### Initial runtime state layout
+Reserve a worker state directory such as:
+
+```text
+~/.pi-worker/
+  state.json
+  heartbeat.json
+  health.json
+  supervisor.log
+  checkpoints/
+```
+
+The exact implementation can be shell-first initially, but the files and meanings should be explicit.
+
+### Suggested commands
+First version should center on supervisor-oriented helper commands such as:
+
+```bash
+pi-worker-supervisor start <session> <workdir>
+pi-worker-supervisor status
+pi-worker-supervisor restart <session>
+pi-worker-supervisor stop <session>
+```
+
+If a shorter `pi-worker-status` alias exists later, it should map cleanly onto `pi-worker-supervisor status` rather than creating a second status contract.
+
+### Verification goals
+- health command returns current session/workspace status
+- heartbeat timestamp updates while Pi is healthy
+- supervisor log path is documented and populated
+- killing Pi process leads to detectable failure and documented restart flow
+
+Success criteria:
+- worker health is machine-readable, not only visible in `tmux`
+- restart path after Pi failure is documented and testable
+- runtime state files exist in known locations
+- Theo can distinguish idle, healthy, stale, and failed states quickly
+
+---
+
+## Phase 6 — Credentials and Secrets
 
 ### Principle
 Only give the VM the secrets it truly needs.
@@ -301,7 +355,7 @@ Success criteria:
 
 ---
 
-## Phase 6 — Hardening
+## Phase 7 — Hardening
 
 ### Minimum hardening checklist
 - dedicated Linux user: `piagent`
@@ -334,7 +388,7 @@ If using only Tailscale SSH, tune rules accordingly.
 
 ---
 
-## Phase 7 — Verification Checklist
+## Phase 8 — Verification Checklist
 
 ### Base environment
 - [ ] VM boots and resumes cleanly
@@ -348,6 +402,13 @@ If using only Tailscale SSH, tune rules accordingly.
 - [ ] `pi-auto-skills` loads
 - [ ] `pi-web-access` loads
 - [ ] `/reload` works cleanly
+
+### Runtime supervision
+- [ ] supervisor can start Pi in target session/workspace
+- [ ] `pi-worker-status` or equivalent health command works
+- [ ] heartbeat timestamp updates while worker is healthy
+- [ ] supervisor log location is known and populated
+- [ ] killing Pi triggers a detectable failure and documented restart path
 
 ### Remote access
 - [ ] local SSH works
@@ -368,7 +429,7 @@ If using only Tailscale SSH, tune rules accordingly.
 
 ---
 
-## Phase 8 — Next Upgrade Path
+## Phase 9 — Next Upgrade Path
 
 Once local VM worker is stable, next upgrade options are:
 
@@ -376,7 +437,7 @@ Once local VM worker is stable, next upgrade options are:
 2. add startup automation for tmux sessions
 3. add lightweight health-check script
 4. add per-task sandboxing inside VM with Docker/Incus
-5. add RPC/SDK wrapper only if a browser control plane becomes necessary
+5. add RPC/SDK wrapper or wake-hook gateway only if an external control plane becomes necessary
 
 ---
 
@@ -388,6 +449,7 @@ Once local VM worker is stable, next upgrade options are:
 4. Clone `theo-pi` into `~/workspaces`
 5. Install Pi packages/config inside guest
 6. Start Pi in tmux for one repo
-7. Install Tailscale and verify remote SSH
-8. Create clean snapshot
-9. Run unattended test: disconnect, leave Pi running, reconnect later
+7. Add lightweight supervisor, health, and heartbeat state
+8. Install Tailscale and verify remote SSH
+9. Create clean snapshot
+10. Run unattended test: disconnect, leave Pi running, reconnect later
