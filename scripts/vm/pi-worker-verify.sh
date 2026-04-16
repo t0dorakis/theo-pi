@@ -13,6 +13,14 @@ check jq
 check node
 check npm
 check pi
+check pi-worker-supervisor
+check pi-worker-status
+check pi-worker-checkpoint
+check pi-worker-tail-logs
+check pi-worker-verify-runtime
+check pi-worker-fail-inject
+check pi-worker-runtime-checklist
+check pi-worker-supervisor-smoke-test
 
 [[ -d "$HOME/workspaces" ]] || fail "~/workspaces missing"
 pass "~/workspaces exists"
@@ -35,6 +43,12 @@ else
   fail "pi-auto-skills not configured"
 fi
 
+[[ -d "$HOME/.pi-worker" ]] || fail "~/.pi-worker missing"
+pass "~/.pi-worker exists"
+
+[[ -f "$HOME/.pi-worker/bootstrap-version" ]] || fail "~/.pi-worker/bootstrap-version missing"
+pass "bootstrap-version exists"
+
 if tmux ls >/dev/null 2>&1; then
   pass "tmux reachable"
 else
@@ -45,4 +59,5 @@ printf '\nManual checks still needed:\n'
 printf ' - SSH reconnect from remote client\n'
 printf ' - Tailscale connectivity\n'
 printf ' - Pi tool use inside real repo\n'
+printf ' - Run pi-worker-supervisor-smoke-test or pi-worker-runtime-checklist <session>\n'
 printf ' - VM snapshot after clean setup\n'

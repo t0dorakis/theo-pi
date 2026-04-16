@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SUPERVISOR="$SCRIPT_DIR/pi-worker-supervisor"
+
+pass() { printf '[pass] %s\n' "$1"; }
+fail() { printf '[fail] %s\n' "$1"; exit 1; }
+
+TMPDIR_ROOT="$(mktemp -d)"
+trap 'tmux kill-session -t smoke-demo >/dev/null 2>&1 || true; rm -rf "$TMPDIR_ROOT"' EXIT
+
+HOME="$TMPDIR_ROOT/home"
+PATH="$HOME/bin:$PATH"
+PI_WORKER_HEARTBEAT_INTERVAL_SECONDS=1
+PI_WORKER_RESTART_DELAY_SECONDS=1
+PI_WORKER_HEARTBEAT_STALE_SECONDS=5
+export HOME PATH PI_WORKER_HEARTBEAT_INTERVAL_SECONDS PI_WORKER_RESTART_DELAY_SECONDS PI_WORKER_HEARTBEAT_STALE_SECONDS
+mkdir -p "$HOME/bin" "$HOME/workspaces/demo"
+
+cat > "$HOME/bin/pi" <<'EOF'
+#!/usr/bin/env bash
+trap 'exit 0' TERM INT
+while true; do sleep 60; done
+EOF
+chmod +x "$HOME/bin/pi"
+
+SESSION="smoke-demo"
+WORKSPACE="$HOME/workspaces/demo"
+
+"$SUPERVISOR" start "$SESSION" "$WORKSPACE" >/dev/null
+READY=0
+for _ in 1 2 3 4 5 6; do
+  sleep 2
+  STATUS_JSON="$($SUPERVISOR status "$SESSION" --json)"
+  if echo "$STATUS_JSON" | jq -e '.daemonStatus == "running" and .ok == true' >/dev/null; then
+    READY=1
+    break
+  fi
+done
+[[ "$READY" -eq 1 ]] || fail 'start -> running health'
+pass 'start -> running health'
+
+echo "$STATUS_JSON" | jq -e '.workspacePath != null and .sessionName == "smoke-demo"' >/dev/null || fail 'status fields present'
+pass 'status fields present'
+
+PI_PID="$(echo "$STATUS_JSON" | jq -r '.pid')"
+START_RESTARTS="$(echo "$STATUS_JSON" | jq -r '.restartCount')"
+[[ -n "$PI_PID" && "$PI_PID" != "null" ]] || fail 'pid present after start'
+kill -KILL "$PI_PID"
+RECOVERED=0
+for _ in 1 2 3 4 5 6; do
+  sleep 2
+  STATUS_JSON="$($SUPERVISOR status "$SESSION" --json)"
+  AFTER_KILL_RESTARTS="$(echo "$STATUS_JSON" | jq -r '.restartCount')"
+  if echo "$STATUS_JSON" | jq -e '.daemonStatus == "running" and .ok == true' >/dev/null && [[ "$AFTER_KILL_RESTARTS" -gt "$START_RESTARTS" ]]; then
+    RECOVERED=1
+    break
+  fi
+done
+[[ "$RECOVERED" -eq 1 ]] || fail 'kill -> restart recovery'
+pass 'kill -> restart recovery'
+
+mv "$WORKSPACE" "$WORKSPACE.broken"
+sleep 2
+STATUS_JSON="$($SUPERVISOR status "$SESSION" --json)"
+echo "$STATUS_JSON" | jq -e '.daemonStatus == "failed" and (.notes | index("workspace path missing")) != null' >/dev/null || fail 'broken workspace -> failed health'
+pass 'broken workspace -> failed health'
+
+mv "$WORKSPACE.broken" "$WORKSPACE"
+"$SUPERVISOR" restart "$SESSION" >/dev/null
+RECOVERED=0
+for _ in 1 2 3 4 5 6; do
+  sleep 2
+  STATUS_JSON="$($SUPERVISOR status "$SESSION" --json)"
+  if echo "$STATUS_JSON" | jq -e '.daemonStatus == "running" and (.restartCount >= 1)' >/dev/null; then
+    RECOVERED=1
+    break
+  fi
+done
+[[ "$RECOVERED" -eq 1 ]] || fail 'restart command -> running with restart count'
+pass 'restart command -> running with restart count'
+
+"$SUPERVISOR" stop "$SESSION" >/dev/null
+sleep 1
+STATUS_JSON="$($SUPERVISOR status "$SESSION" --json)"
+echo "$STATUS_JSON" | jq -e '.daemonStatus == "stopped" and .ok == false' >/dev/null || fail 'stop -> stopped health'
+pass 'stop -> stopped health'
+
+pass 'all smoke checks passed'

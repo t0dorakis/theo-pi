@@ -97,10 +97,20 @@ If you ever want to force immediate capture of the current workflow, the package
 
 For Theo's local Linux VM worker setup, repo includes:
 
-- `scripts/vm/bootstrap-ubuntu-pi-worker.sh` — base Ubuntu packages + Node + Pi + directories
+- `scripts/vm/bootstrap-ubuntu-pi-worker.sh` — base Ubuntu packages + Node + Pi + directories, plus `~/bin` command wrappers
 - `scripts/vm/install-theo-pi-worker.sh` — clone/update repo in guest and configure Pi packages
-- `scripts/vm/pi-worker-start` — start Pi in named `tmux` session
+- `scripts/vm/pi-worker-supervisor` — lightweight supervisor with `start/status/restart/stop/checkpoint/verify/tail-logs` commands and `~/.pi-worker/` state files
+- `scripts/vm/pi-worker-start` — compatibility wrapper for `pi-worker-supervisor start`
+- `scripts/vm/pi-worker-status` — compatibility wrapper for `pi-worker-supervisor status`
+- `scripts/vm/pi-worker-restart` — compatibility wrapper for `pi-worker-supervisor restart`
+- `scripts/vm/pi-worker-stop` — compatibility wrapper for `pi-worker-supervisor stop`
+- `scripts/vm/pi-worker-checkpoint` — compatibility wrapper for `pi-worker-supervisor checkpoint`
+- `scripts/vm/pi-worker-tail-logs` — compatibility wrapper for `pi-worker-supervisor tail-logs`
+- `scripts/vm/pi-worker-verify-runtime` — compatibility wrapper for `pi-worker-supervisor verify`
+- `scripts/vm/pi-worker-fail-inject` — helper for runtime failure injection (`kill`, `stale`, `break-workspace`, `restore-workspace`)
+- `scripts/vm/pi-worker-runtime-checklist` — run supervised-runtime verification checks against a real session
 - `scripts/vm/pi-worker-verify.sh` — verify guest worker prerequisites/config
+- `scripts/vm/pi-worker-supervisor-smoke-test` — temp-HOME smoke test for supervisor start/status/kill/restart/stop behavior
 - `templates/pi-worker/` — starter `settings.json`, `.env`, and SSH hardening snippets
 - `docs/plans/2026-04-14-personal-autonomous-pi-worker-bootstrap-checklist.md` — step-by-step bootstrap checklist
 

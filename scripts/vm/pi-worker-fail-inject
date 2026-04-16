@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SUPERVISOR="$SCRIPT_DIR/pi-worker-supervisor"
+
+usage() {
+  cat >&2 <<'EOF'
+usage:
+  pi-worker-fail-inject kill <session>
+  pi-worker-fail-inject stale <session> [seconds]
+  pi-worker-fail-inject break-workspace <session>
+  pi-worker-fail-inject restore-workspace <session>
+EOF
+  exit 1
+}
+
+session_workspace() {
+  "$SUPERVISOR" status "$1" --json | jq -r '.workspacePath // empty'
+}
+
+case "${1:-}" in
+  kill)
+    [[ $# -eq 2 ]] || usage
+    pid="$($SUPERVISOR status "$2" --json | jq -r '.pid')"
+    [[ -n "$pid" && "$pid" != "null" ]] || { echo "no pid for session: $2" >&2; exit 1; }
+    kill -KILL "$pid"
+    echo "killed pid $pid for session $2"
+    ;;
+  stale)
+    [[ $# -ge 2 && $# -le 3 ]] || usage
+    seconds="${3:-600}"
+    heartbeat="${PI_WORKER_STATE_DIR:-$HOME/.pi-worker}/heartbeat.json"
+    [[ -f "$heartbeat" ]] || { echo "missing heartbeat file: $heartbeat" >&2; exit 1; }
+    python3 - "$heartbeat" "$2" "$seconds" <<'PY'
+import json, sys
+from datetime import datetime, timedelta, timezone
+path, session, seconds = sys.argv[1], sys.argv[2], int(sys.argv[3])
+with open(path) as f:
+    data = json.load(f)
+if data.get('sessionName') != session:
+    raise SystemExit(f'heartbeat session mismatch: {data.get("sessionName")} != {session}')
+stale = (datetime.now(timezone.utc) - timedelta(seconds=seconds)).strftime('%Y-%m-%dT%H:%M:%SZ')
+data['lastHeartbeatAt'] = stale
+with open(path, 'w') as f:
+    json.dump(data, f, indent=2)
+    f.write('\n')
+print(stale)
+PY
+    ;;
+  break-workspace)
+    [[ $# -eq 2 ]] || usage
+    workspace="$(session_workspace "$2")"
+    [[ -n "$workspace" && -d "$workspace" ]] || { echo "workspace missing for session: $2" >&2; exit 1; }
+    broken="${workspace}.broken-by-pi-worker-fail-inject"
+    [[ ! -e "$broken" ]] || { echo "broken target already exists: $broken" >&2; exit 1; }
+    mv "$workspace" "$broken"
+    echo "$broken"
+    ;;
+  restore-workspace)
+    [[ $# -eq 2 ]] || usage
+    workspace="$(session_workspace "$2")"
+    if [[ -n "$workspace" && -d "$workspace" ]]; then
+      echo "workspace already present: $workspace"
+      exit 0
+    fi
+    state_file="${PI_WORKER_STATE_DIR:-$HOME/.pi-worker}/sessions/$2.json"
+    [[ -f "$state_file" ]] || { echo "missing state file for session: $2" >&2; exit 1; }
+    original="$(jq -r '.activeWorkspacePath // empty' "$state_file")"
+    broken="${original}.broken-by-pi-worker-fail-inject"
+    [[ -d "$broken" ]] || { echo "broken workspace not found: $broken" >&2; exit 1; }
+    mv "$broken" "$original"
+    echo "$original"
+    ;;
+  *)
+    usage
+    ;;
+esac

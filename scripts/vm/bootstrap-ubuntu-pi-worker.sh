@@ -30,7 +30,15 @@ else
 fi
 
 echo "==> Creating worker directories"
-mkdir -p "$HOME/workspaces" "$HOME/logs" "$HOME/bin" "$HOME/.pi/agent" "$HOME/.agents/skills"
+mkdir -p "$HOME/workspaces" "$HOME/logs" "$HOME/bin" "$HOME/.pi/agent" "$HOME/.agents/skills" "$HOME/.pi-worker/checkpoints" "$HOME/.pi-worker/sessions"
+
+if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
+  if [[ -f "$HOME/.bashrc" ]]; then
+    if ! grep -Fq 'export PATH="$HOME/bin:$PATH"' "$HOME/.bashrc"; then
+      printf '\nexport PATH="$HOME/bin:$PATH"\n' >> "$HOME/.bashrc"
+    fi
+  fi
+fi
 
 if [[ ! -f "$HOME/.tmux.conf" ]]; then
   cat > "$HOME/.tmux.conf" <<'EOF'
@@ -56,5 +64,16 @@ npm -v
 pi --version || true
 tmux -V
 git --version
+
+echo "==> Installing local worker command wrappers into ~/bin"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for cmd in pi-worker-supervisor pi-worker-start pi-worker-status pi-worker-restart pi-worker-stop pi-worker-checkpoint pi-worker-tail-logs pi-worker-verify-runtime pi-worker-fail-inject pi-worker-runtime-checklist pi-worker-verify.sh pi-worker-supervisor-smoke-test; do
+  ln -sf "$SCRIPT_DIR/$cmd" "$HOME/bin/$cmd"
+done
+chmod +x "$SCRIPT_DIR"/pi-worker-supervisor "$SCRIPT_DIR"/pi-worker-start "$SCRIPT_DIR"/pi-worker-status "$SCRIPT_DIR"/pi-worker-restart "$SCRIPT_DIR"/pi-worker-stop "$SCRIPT_DIR"/pi-worker-checkpoint "$SCRIPT_DIR"/pi-worker-tail-logs "$SCRIPT_DIR"/pi-worker-verify-runtime "$SCRIPT_DIR"/pi-worker-fail-inject "$SCRIPT_DIR"/pi-worker-runtime-checklist "$SCRIPT_DIR"/pi-worker-verify.sh "$SCRIPT_DIR"/pi-worker-supervisor-smoke-test
+
+if [[ ! -f "$HOME/.pi-worker/bootstrap-version" ]]; then
+  printf '2026-04-15.1\n' > "$HOME/.pi-worker/bootstrap-version"
+fi
 
 echo "Done. Next: clone repos into ~/workspaces, install Pi packages, configure SSH/Tailscale."

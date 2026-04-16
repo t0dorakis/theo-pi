@@ -1,0 +1,617 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_DIR="${PI_WORKER_STATE_DIR:-$HOME/.pi-worker}"
+SESSIONS_DIR="$STATE_DIR/sessions"
+CHECKPOINTS_DIR="$STATE_DIR/checkpoints"
+LOG_FILE="$STATE_DIR/supervisor.log"
+BOOTSTRAP_VERSION_FILE="$STATE_DIR/bootstrap-version"
+BOOTSTRAP_VERSION="${PI_WORKER_BOOTSTRAP_VERSION:-2026-04-15.1}"
+HEARTBEAT_STALE_SECONDS="${PI_WORKER_HEARTBEAT_STALE_SECONDS:-300}"
+HEARTBEAT_INTERVAL_SECONDS="${PI_WORKER_HEARTBEAT_INTERVAL_SECONDS:-30}"
+MONITOR_INTERVAL_SECONDS="${PI_WORKER_MONITOR_INTERVAL_SECONDS:-2}"
+MAX_RESTARTS="${PI_WORKER_MAX_RESTARTS:-5}"
+RESTART_DELAY_SECONDS="${PI_WORKER_RESTART_DELAY_SECONDS:-2}"
+
+mkdir -p "$STATE_DIR" "$SESSIONS_DIR" "$CHECKPOINTS_DIR"
+printf '%s\n' "$BOOTSTRAP_VERSION" > "$BOOTSTRAP_VERSION_FILE"
+touch "$LOG_FILE"
+
+now_iso() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+to_epoch() {
+  local iso="$1"
+
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$iso" <<'PY'
+from datetime import datetime, timezone
+import sys
+value = sys.argv[1]
+if not value:
+    raise SystemExit(1)
+print(int(datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()))
+PY
+    return 0
+  fi
+
+  date -u -d "$iso" +%s 2>/dev/null
+}
+
+log() {
+  printf '[%s] [%s] %s\n' "$(now_iso)" "${1:-main}" "${2:-}" | tee -a "$LOG_FILE" >/dev/null
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "missing required command: $1" >&2
+    exit 1
+  }
+}
+
+require_cmd tmux
+require_cmd jq
+
+session_state_file() {
+  printf '%s/%s.json\n' "$SESSIONS_DIR" "$1"
+}
+
+session_stop_file() {
+  printf '%s/%s.stop\n' "$SESSIONS_DIR" "$1"
+}
+
+session_pid_file() {
+  printf '%s/%s.supervisor.pid\n' "$SESSIONS_DIR" "$1"
+}
+
+checkpoint_file() {
+  local label="$1"
+  printf '%s/%s.json\n' "$CHECKPOINTS_DIR" "$label"
+}
+
+read_session_field() {
+  local session="$1"
+  local field="$2"
+  local file
+  file="$(session_state_file "$session")"
+  [[ -f "$file" ]] || return 1
+  jq -r "$field // empty" "$file"
+}
+
+ensure_workspace() {
+  local workspace="$1"
+  [[ -d "$workspace" ]] || {
+    echo "workspace not found: $workspace" >&2
+    exit 1
+  }
+}
+
+write_session_state() {
+  local session="$1"
+  local workspace="$2"
+  local status="$3"
+  local restart_count="$4"
+  local pi_pid="$5"
+  local supervisor_pid="$6"
+  local last_started_at="$7"
+  local last_restarted_at="$8"
+
+  local file
+  file="$(session_state_file "$session")"
+  local tmp_file tmp_state
+  tmp_file="$(mktemp "${file}.tmp.XXXXXX")"
+  jq -n \
+    --arg runtimeVersion "v1" \
+    --arg activeSessionName "$session" \
+    --arg activeWorkspacePath "$workspace" \
+    --arg daemonStatus "$status" \
+    --argjson restartCount "$restart_count" \
+    --arg piPidRaw "${pi_pid:-null}" \
+    --arg supervisorPidRaw "${supervisor_pid:-null}" \
+    --arg lastStartedAt "$last_started_at" \
+    --arg lastRestartedAt "$last_restarted_at" \
+    '{
+      runtimeVersion: $runtimeVersion,
+      activeSessionName: $activeSessionName,
+      activeWorkspacePath: $activeWorkspacePath,
+      piPid: ($piPidRaw | if . == "null" or . == "" then null else tonumber end),
+      supervisorPid: ($supervisorPidRaw | if . == "null" or . == "" then null else tonumber end),
+      daemonStatus: $daemonStatus,
+      restartCount: $restartCount,
+      lastStartedAt: ($lastStartedAt | if length > 0 then . else null end),
+      lastRestartedAt: ($lastRestartedAt | if length > 0 then . else null end)
+    }' > "$tmp_file"
+  mv "$tmp_file" "$file"
+
+  tmp_state="$(mktemp "$STATE_DIR/state.json.tmp.XXXXXX")"
+  cp "$file" "$tmp_state"
+  mv "$tmp_state" "$STATE_DIR/state.json"
+}
+
+write_heartbeat() {
+  local session="$1"
+  local workspace="$2"
+  local last_heartbeat_at="$3"
+  local last_success_at="$4"
+
+  local tmp_file
+  tmp_file="$(mktemp "$STATE_DIR/heartbeat.json.tmp.XXXXXX")"
+  jq -n \
+    --arg sessionName "$session" \
+    --arg workspacePath "$workspace" \
+    --arg lastHeartbeatAt "$last_heartbeat_at" \
+    --arg lastSuccessAt "$last_success_at" \
+    '{
+      sessionName: $sessionName,
+      workspacePath: $workspacePath,
+      lastHeartbeatAt: ($lastHeartbeatAt | if length > 0 then . else null end),
+      lastSuccessAt: ($lastSuccessAt | if length > 0 then . else null end)
+    }' > "$tmp_file"
+  mv "$tmp_file" "$STATE_DIR/heartbeat.json"
+}
+
+write_health() {
+  local session="$1"
+  local workspace="$2"
+  local status="$3"
+  local restart_count="$4"
+  local pi_pid="$5"
+  local last_heartbeat_at="$6"
+  local last_success_at="$7"
+  local notes_json="$8"
+  local ok="false"
+
+  if [[ "$status" == "running" ]]; then
+    ok="true"
+  fi
+
+  local tmp_file
+  tmp_file="$(mktemp "$STATE_DIR/health.json.tmp.XXXXXX")"
+  jq -n \
+    --argjson ok "$ok" \
+    --arg daemonStatus "$status" \
+    --arg sessionName "$session" \
+    --arg workspacePath "$workspace" \
+    --arg pidRaw "${pi_pid:-null}" \
+    --argjson restartCount "$restart_count" \
+    --arg lastHeartbeatAt "$last_heartbeat_at" \
+    --arg lastSuccessAt "$last_success_at" \
+    --arg bootstrapVersion "$BOOTSTRAP_VERSION" \
+    --argjson notes "$notes_json" \
+    '{
+      ok: $ok,
+      daemonStatus: $daemonStatus,
+      sessionName: $sessionName,
+      workspacePath: $workspacePath,
+      pid: ($pidRaw | if . == "null" or . == "" then null else tonumber end),
+      restartCount: $restartCount,
+      lastHeartbeatAt: ($lastHeartbeatAt | if length > 0 then . else null end),
+      lastSuccessAt: ($lastSuccessAt | if length > 0 then . else null end),
+      bootstrapVersion: $bootstrapVersion,
+      notes: $notes
+    }' > "$tmp_file"
+  mv "$tmp_file" "$STATE_DIR/health.json"
+}
+
+find_descendant_pid() {
+  local parent_pid="$1"
+  local match="$2"
+  local children child found
+  children="$(pgrep -P "$parent_pid" 2>/dev/null || true)"
+  for child in $children; do
+    if ps -p "$child" -o command= 2>/dev/null | grep -Eq "$match"; then
+      echo "$child"
+      return 0
+    fi
+    found="$(find_descendant_pid "$child" "$match" || true)"
+    if [[ -n "$found" ]]; then
+      echo "$found"
+      return 0
+    fi
+  done
+  return 1
+}
+
+pane_pid_for_session() {
+  tmux list-panes -t "$1" -F '#{pane_pid}' 2>/dev/null | head -n 1
+}
+
+pi_pid_for_session() {
+  local pane_pid pi_pid
+  pane_pid="$(pane_pid_for_session "$1" || true)"
+  [[ -n "$pane_pid" ]] || return 1
+  pi_pid="$(find_descendant_pid "$pane_pid" '(^|/)pi( |$)' || true)"
+  if [[ -n "$pi_pid" ]]; then
+    echo "$pi_pid"
+    return 0
+  fi
+  if ps -p "$pane_pid" -o command= 2>/dev/null | grep -Eq '(^|/)pi( |$)'; then
+    echo "$pane_pid"
+    return 0
+  fi
+  return 1
+}
+
+launch_pi_session() {
+  local session="$1"
+  local workspace="$2"
+
+  if tmux has-session -t "$session" 2>/dev/null; then
+    tmux kill-session -t "$session" >/dev/null 2>&1 || true
+  fi
+
+  tmux new-session -d -s "$session" "cd '$workspace' && if [[ -f \"$HOME/.env.pi\" ]]; then source \"$HOME/.env.pi\"; fi && exec pi"
+}
+
+refresh_health_for_session() {
+  local session="$1"
+  local state_file workspace status restart_count last_started_at last_restarted_at supervisor_pid stop_file
+  local pi_pid=""
+  local last_heartbeat_at=""
+  local last_success_at=""
+  local notes='[]'
+  local now epoch now_epoch hb_epoch age
+
+  state_file="$(session_state_file "$session")"
+  [[ -f "$state_file" ]] || {
+    echo "session not found: $session" >&2
+    return 1
+  }
+
+  workspace="$(jq -r '.activeWorkspacePath' "$state_file")"
+  status="$(jq -r '.daemonStatus // "failed"' "$state_file")"
+  restart_count="$(jq -r '.restartCount // 0' "$state_file")"
+  last_started_at="$(jq -r '.lastStartedAt // ""' "$state_file")"
+  last_restarted_at="$(jq -r '.lastRestartedAt // ""' "$state_file")"
+  supervisor_pid="$(jq -r '.supervisorPid // empty' "$state_file")"
+  stop_file="$(session_stop_file "$session")"
+
+  if [[ -f "$STATE_DIR/heartbeat.json" ]]; then
+    last_heartbeat_at="$(jq -r 'select(.sessionName == '"\"$session\""') | .lastHeartbeatAt // empty' "$STATE_DIR/heartbeat.json" 2>/dev/null || true)"
+    last_success_at="$(jq -r 'select(.sessionName == '"\"$session\""') | .lastSuccessAt // empty' "$STATE_DIR/heartbeat.json" 2>/dev/null || true)"
+  fi
+
+  if [[ -n "$supervisor_pid" ]] && ! kill -0 "$supervisor_pid" 2>/dev/null; then
+    if [[ "$status" == "stopped" || -f "$stop_file" ]]; then
+      supervisor_pid=""
+    else
+      notes='["supervisor pid missing"]'
+      status="failed"
+    fi
+  fi
+
+  if tmux has-session -t "$session" 2>/dev/null; then
+    pi_pid="$(pi_pid_for_session "$session" || true)"
+    if [[ -z "$pi_pid" && "$status" == "running" ]]; then
+      notes='["session exists but pi pid missing"]'
+      status="stale"
+    fi
+  else
+    if [[ -f "$stop_file" ]]; then
+      status="stopped"
+    elif [[ "$status" == "running" ]]; then
+      status="failed"
+      notes='["tmux session missing"]'
+    fi
+  fi
+
+  if [[ -n "$last_heartbeat_at" ]]; then
+    now_epoch="$(date -u +%s)"
+    hb_epoch="$(to_epoch "$last_heartbeat_at" 2>/dev/null || true)"
+    if [[ -n "$hb_epoch" ]]; then
+      age=$((now_epoch - hb_epoch))
+      if (( age > HEARTBEAT_STALE_SECONDS )) && [[ "$status" == "running" ]]; then
+        status="stale"
+        notes='["heartbeat stale"]'
+      fi
+    fi
+  fi
+
+  if [[ ! -d "$workspace" ]]; then
+    status="failed"
+    notes='["workspace path missing"]'
+  fi
+
+  write_session_state "$session" "$workspace" "$status" "$restart_count" "${pi_pid:-null}" "${supervisor_pid:-null}" "$last_started_at" "$last_restarted_at"
+  write_health "$session" "$workspace" "$status" "$restart_count" "${pi_pid:-null}" "$last_heartbeat_at" "$last_success_at" "$notes"
+}
+
+checkpoint_command() {
+  local label="${1:-manual}"
+  local session workspace restart_count status now file latest_file
+
+  session="$(jq -r '.activeSessionName // empty' "$STATE_DIR/state.json" 2>/dev/null || true)"
+  [[ -n "$session" ]] || {
+    echo "no active session found" >&2
+    exit 1
+  }
+
+  workspace="$(read_session_field "$session" '.activeWorkspacePath' || true)"
+  restart_count="$(read_session_field "$session" '.restartCount // 0' || echo 0)"
+  status="$(read_session_field "$session" '.daemonStatus // "unknown"' || echo unknown)"
+  now="$(now_iso)"
+  label="${label// /-}"
+  file="$(checkpoint_file "${label}-${now//:/-}")"
+  latest_file="$CHECKPOINTS_DIR/latest.json"
+
+  jq -n \
+    --arg label "$label" \
+    --arg createdAt "$now" \
+    --arg sessionName "$session" \
+    --arg workspacePath "$workspace" \
+    --arg daemonStatus "$status" \
+    --argjson restartCount "$restart_count" \
+    '{
+      label: $label,
+      createdAt: $createdAt,
+      sessionName: $sessionName,
+      workspacePath: $workspacePath,
+      daemonStatus: $daemonStatus,
+      restartCount: $restartCount
+    }' > "$file"
+
+  cp "$file" "$latest_file"
+  echo "$file"
+}
+
+verify_command() {
+  local session workspace ok=1
+
+  require_cmd tmux
+  require_cmd jq
+
+  [[ -d "$STATE_DIR" ]] || { echo "missing state dir: $STATE_DIR"; ok=0; }
+  [[ -f "$BOOTSTRAP_VERSION_FILE" ]] || { echo "missing bootstrap version file: $BOOTSTRAP_VERSION_FILE"; ok=0; }
+  [[ -f "$LOG_FILE" ]] || { echo "missing supervisor log: $LOG_FILE"; ok=0; }
+
+  session="$(jq -r '.activeSessionName // empty' "$STATE_DIR/state.json" 2>/dev/null || true)"
+  if [[ -n "$session" ]]; then
+    workspace="$(read_session_field "$session" '.activeWorkspacePath' || true)"
+    [[ -n "$workspace" && -d "$workspace" ]] || { echo "workspace missing for active session: $workspace"; ok=0; }
+    [[ -f "$STATE_DIR/health.json" ]] || { echo "missing health file"; ok=0; }
+    [[ -f "$STATE_DIR/heartbeat.json" ]] || { echo "missing heartbeat file"; ok=0; }
+    [[ -f "$(session_state_file "$session")" ]] || { echo "missing session state file for: $session"; ok=0; }
+  else
+    echo "no active session in state.json"
+  fi
+
+  if [[ "$ok" -eq 1 ]]; then
+    echo "verification passed"
+  else
+    exit 1
+  fi
+}
+
+tail_logs_command() {
+  local lines="${1:-40}"
+  tail -n "$lines" "$LOG_FILE"
+}
+
+print_status() {
+  local session="$1"
+  local format="${2:-human}"
+  refresh_health_for_session "$session"
+  if [[ "$format" == "json" ]]; then
+    cat "$STATE_DIR/health.json"
+    return 0
+  fi
+
+  jq -r '
+    [
+      "Worker: " + (if .ok then "healthy" else "unhealthy" end),
+      "Session: " + (.sessionName // "unknown"),
+      "Workspace: " + (.workspacePath // "unknown"),
+      "Status: " + (.daemonStatus // "unknown"),
+      "PID: " + ((.pid // "null")|tostring),
+      "Restarts: " + ((.restartCount // 0)|tostring),
+      "Last heartbeat: " + (.lastHeartbeatAt // "unknown"),
+      "Last success: " + (.lastSuccessAt // "unknown"),
+      (if (.notes | length) > 0 then "Notes: " + (.notes | join(", ")) else empty end)
+    ] | .[]
+  ' "$STATE_DIR/health.json"
+}
+
+run_supervisor_loop() {
+  local session="$1"
+  local workspace="$2"
+  local restart_count="${3:-0}"
+  local last_started_at="${4:-}"
+  local last_restarted_at="${5:-}"
+  local stop_file supervisor_pid pi_pid heartbeat_at last_heartbeat_epoch now_epoch
+
+  stop_file="$(session_stop_file "$session")"
+  supervisor_pid="$$"
+  echo "$supervisor_pid" > "$(session_pid_file "$session")"
+  rm -f "$stop_file"
+
+  if [[ -z "$last_started_at" ]]; then
+    last_started_at="$(now_iso)"
+  fi
+
+  log "$session" "supervisor loop started for $workspace"
+  last_heartbeat_epoch=0
+
+  while true; do
+    if [[ -f "$stop_file" ]]; then
+      log "$session" "stop marker detected"
+      write_session_state "$session" "$workspace" "stopped" "$restart_count" null "$supervisor_pid" "$last_started_at" "$last_restarted_at"
+      write_health "$session" "$workspace" "stopped" "$restart_count" null "" "" '[]'
+      rm -f "$(session_pid_file "$session")"
+      return 0
+    fi
+
+    if [[ ! -d "$workspace" ]]; then
+      log "$session" "workspace missing: $workspace"
+      write_session_state "$session" "$workspace" "failed" "$restart_count" null "$supervisor_pid" "$last_started_at" "$last_restarted_at"
+      write_health "$session" "$workspace" "failed" "$restart_count" null "" "" '["workspace path missing"]'
+      rm -f "$(session_pid_file "$session")"
+      return 1
+    fi
+
+    if ! tmux has-session -t "$session" 2>/dev/null; then
+      if (( restart_count >= MAX_RESTARTS )); then
+        log "$session" "restart cap reached before launch"
+        write_session_state "$session" "$workspace" "failed" "$restart_count" null "$supervisor_pid" "$last_started_at" "$last_restarted_at"
+        write_health "$session" "$workspace" "failed" "$restart_count" null "" "" '["restart cap reached"]'
+        rm -f "$(session_pid_file "$session")"
+        return 1
+      fi
+      log "$session" "launching pi session"
+      launch_pi_session "$session" "$workspace"
+      restart_count=$((restart_count + 1))
+      last_restarted_at="$(now_iso)"
+      sleep "$RESTART_DELAY_SECONDS"
+    fi
+
+    pi_pid="$(pi_pid_for_session "$session" || true)"
+    if [[ -z "$pi_pid" ]]; then
+      if (( restart_count >= MAX_RESTARTS )); then
+        log "$session" "restart cap reached after missing pi pid"
+        tmux kill-session -t "$session" >/dev/null 2>&1 || true
+        write_session_state "$session" "$workspace" "failed" "$restart_count" null "$supervisor_pid" "$last_started_at" "$last_restarted_at"
+        write_health "$session" "$workspace" "failed" "$restart_count" null "" "" '["restart cap reached"]'
+        rm -f "$(session_pid_file "$session")"
+        return 1
+      fi
+      log "$session" "pi pid missing, restarting session"
+      tmux kill-session -t "$session" >/dev/null 2>&1 || true
+      sleep "$RESTART_DELAY_SECONDS"
+      continue
+    fi
+
+    now_epoch="$(date -u +%s)"
+    heartbeat_at="$(now_iso)"
+    write_session_state "$session" "$workspace" "running" "$restart_count" "$pi_pid" "$supervisor_pid" "$last_started_at" "$last_restarted_at"
+    if (( last_heartbeat_epoch == 0 || now_epoch - last_heartbeat_epoch >= HEARTBEAT_INTERVAL_SECONDS )); then
+      write_heartbeat "$session" "$workspace" "$heartbeat_at" "$heartbeat_at"
+      last_heartbeat_epoch="$now_epoch"
+    fi
+    write_health "$session" "$workspace" "running" "$restart_count" "$pi_pid" "$heartbeat_at" "$heartbeat_at" '[]'
+    sleep "$MONITOR_INTERVAL_SECONDS"
+  done
+}
+
+start_command() {
+  local session="$1"
+  local workspace="$2"
+  local state_file existing_pid
+
+  ensure_workspace "$workspace"
+  state_file="$(session_state_file "$session")"
+  existing_pid="$(read_session_field "$session" '.supervisorPid' || true)"
+  if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+    echo "supervisor already running: session=$session pid=$existing_pid"
+    exit 0
+  fi
+
+  write_session_state "$session" "$workspace" "starting" 0 null null "$(now_iso)" ""
+  write_health "$session" "$workspace" "starting" 0 null "" "" '[]'
+  nohup "$0" __run-supervisor "$session" "$workspace" 0 "$(now_iso)" "" >> "$LOG_FILE" 2>&1 &
+  sleep 1
+  refresh_health_for_session "$session"
+  echo "started supervisor for $session in $workspace"
+}
+
+stop_command() {
+  local session="$1"
+  local pid workspace
+  workspace="$(read_session_field "$session" '.activeWorkspacePath' || true)"
+  pid="$(read_session_field "$session" '.supervisorPid' || true)"
+  touch "$(session_stop_file "$session")"
+  if tmux has-session -t "$session" 2>/dev/null; then
+    tmux kill-session -t "$session" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$workspace" ]]; then
+    write_session_state "$session" "$workspace" "stopped" "$(read_session_field "$session" '.restartCount // 0' || echo 0)" null null "$(read_session_field "$session" '.lastStartedAt // ""' || true)" "$(now_iso)"
+    write_health "$session" "$workspace" "stopped" "$(read_session_field "$session" '.restartCount // 0' || echo 0)" null "" "" '[]'
+  fi
+  echo "stopped $session"
+}
+
+restart_command() {
+  local session="$1"
+  local workspace restart_count last_started_at
+  workspace="$(read_session_field "$session" '.activeWorkspacePath' || true)"
+  [[ -n "$workspace" ]] || {
+    echo "unknown session: $session" >&2
+    exit 1
+  }
+  ensure_workspace "$workspace"
+  stop_command "$session" >/dev/null
+  sleep 1
+  restart_count="$(read_session_field "$session" '.restartCount // 0' || echo 0)"
+  last_started_at="$(read_session_field "$session" '.lastStartedAt // ""' || true)"
+  write_session_state "$session" "$workspace" "starting" "$restart_count" null null "${last_started_at:-$(now_iso)}" "$(now_iso)"
+  nohup "$0" __run-supervisor "$session" "$workspace" "$restart_count" "${last_started_at:-$(now_iso)}" "$(now_iso)" >> "$LOG_FILE" 2>&1 &
+  sleep 1
+  refresh_health_for_session "$session"
+  echo "restarted $session"
+}
+
+status_command() {
+  local session="${1:-}"
+  local format="human"
+  if [[ "$session" == "--json" ]]; then
+    format="json"
+    session=""
+  fi
+  if [[ "${2:-}" == "--json" ]]; then
+    format="json"
+  fi
+  if [[ -z "$session" ]]; then
+    session="$(jq -r '.activeSessionName // empty' "$STATE_DIR/state.json" 2>/dev/null || true)"
+  fi
+  [[ -n "$session" ]] || {
+    echo "no active session found" >&2
+    exit 1
+  }
+  print_status "$session" "$format"
+}
+
+case "${1:-}" in
+  start)
+    [[ $# -eq 3 ]] || { echo "usage: pi-worker-supervisor start <session> <workspace>" >&2; exit 1; }
+    start_command "$2" "$3"
+    ;;
+  status)
+    status_command "${2:-}" "${3:-}"
+    ;;
+  restart)
+    [[ $# -eq 2 ]] || { echo "usage: pi-worker-supervisor restart <session>" >&2; exit 1; }
+    restart_command "$2"
+    ;;
+  stop)
+    [[ $# -eq 2 ]] || { echo "usage: pi-worker-supervisor stop <session>" >&2; exit 1; }
+    stop_command "$2"
+    ;;
+  checkpoint)
+    checkpoint_command "${2:-manual}"
+    ;;
+  verify)
+    verify_command
+    ;;
+  tail-logs)
+    tail_logs_command "${2:-40}"
+    ;;
+  __run-supervisor)
+    [[ $# -ge 3 ]] || { echo "usage: pi-worker-supervisor __run-supervisor <session> <workspace> [restartCount] [lastStartedAt] [lastRestartedAt]" >&2; exit 1; }
+    run_supervisor_loop "$2" "$3" "${4:-0}" "${5:-}" "${6:-}"
+    ;;
+  *)
+    cat >&2 <<'EOF'
+usage:
+  pi-worker-supervisor start <session> <workspace>
+  pi-worker-supervisor status [session] [--json]
+  pi-worker-supervisor restart <session>
+  pi-worker-supervisor stop <session>
+  pi-worker-supervisor checkpoint [label]
+  pi-worker-supervisor verify
+  pi-worker-supervisor tail-logs [lines]
+EOF
+    exit 1
+    ;;
+esac
