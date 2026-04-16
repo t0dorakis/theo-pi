@@ -1,0 +1,1 @@
+Dogfood the task-loop extension in this repo. Work only inside this fixture repo. Complete all 10 tasks in .agent/tasks.json. Keep .agent/progress.md and .agent/tasks.json accurate as work progresses. Run npm test before claiming completion. Continue autonomously until all tasks are truly done or a real blocker exists.
