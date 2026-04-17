@@ -4,15 +4,15 @@ import { mkdir } from "node:fs/promises"
 import { promisify } from "node:util"
 
 import { getRuntimeEnv } from "./lib/env"
+import { createJobQueue } from "./lib/jobs"
 import { getScriptDir, localScript } from "./lib/paths"
 import { createStateStore } from "./lib/state-store"
-import { nowIso } from "./lib/time"
-import type { WorkerJob } from "./lib/types"
 
 const execFileAsync = promisify(execFile)
 const env = getRuntimeEnv()
 const scriptDir = getScriptDir(import.meta.url)
 const stateStore = createStateStore(env.stateDir)
+const queue = createJobQueue(env.stateDir)
 
 const token = env.telegramBotToken
 const allowedChatIds = env.telegramAllowedChatIds
@@ -120,12 +120,8 @@ async function loadJobs() {
   return jobs.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 }
 
-async function saveJob(job: WorkerJob) {
-  await stateStore.writeTelegramJob(job)
-}
-
 async function enqueuePrompt(chatId: number, prompt: string) {
-  await runLocal(localScript(scriptDir, "pi-worker-submit-job"), [String(chatId), prompt])
+  await queue.enqueueJob({ chatId: String(chatId), prompt })
 }
 
 async function maybeStartTyping(chatId: number) {
@@ -209,12 +205,10 @@ async function drainQueue() {
         if (job.telegramDeliveredAt) continue
         if (job.status === "done" && job.answer) {
           await sendMessage(Number(job.chatId), job.answer)
-          job.telegramDeliveredAt = nowIso()
-          await saveJob(job)
+          await queue.markDelivered(job.id)
         } else if (job.status === "failed") {
           await sendMessage(Number(job.chatId), `Error: ${job.error ?? "job failed"}`)
-          job.telegramDeliveredAt = nowIso()
-          await saveJob(job)
+          await queue.markDelivered(job.id)
         }
       }
 
