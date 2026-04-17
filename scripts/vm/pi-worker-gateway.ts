@@ -2,6 +2,7 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 
+import { createTmuxBackend } from "./lib/backends/tmux-backend"
 import { getRuntimeEnv } from "./lib/env"
 import { getScriptDir, localScript } from "./lib/paths"
 import { createStateStore } from "./lib/state-store"
@@ -18,6 +19,11 @@ const bearerToken = env.gatewayToken
 const telegramToken = env.telegramBotToken
 const telegramAllowedChats = env.telegramAllowedChatIds
 const logsLines = env.telegramLogLines
+const backend = createTmuxBackend({
+  session,
+  delegateScript: localScript(scriptDir, "pi-worker-delegate"),
+  runLocal,
+})
 
 type JsonRecord = Record<string, unknown>
 type TelegramMessage = {
@@ -170,7 +176,9 @@ const server = Bun.serve({
 
     try {
       if (request.method === "GET" && url.pathname === "/health") {
-        return json(await statusJson())
+        const status = await statusJson()
+        const backendHealth = await backend.sessionHealth()
+        return json({ ...status, backend: backendHealth })
       }
 
       if (request.method === "GET" && url.pathname === "/status") {

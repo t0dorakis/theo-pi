@@ -2,6 +2,7 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 
+import { createTmuxBackend } from "./lib/backends/tmux-backend"
 import { getRuntimeEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
 import { getScriptDir, localScript } from "./lib/paths"
@@ -27,14 +28,12 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function extractAnswer(pane: string, startMarker: string, endMarker: string) {
-  const start = pane.lastIndexOf(startMarker)
-  if (start === -1) return null
-  const afterStart = pane.slice(start + startMarker.length)
-  const end = afterStart.indexOf(endMarker)
-  if (end === -1) return null
-  return afterStart.slice(0, end).replace(/^[\s]+|[\s]+$/g, "")
-}
+const backend = createTmuxBackend({
+  session,
+  captureLines,
+  delegateScript: localScript(scriptDir, "pi-worker-delegate"),
+  runLocal,
+})
 
 const jobId = process.argv[2]
 if (!jobId) {
@@ -54,18 +53,12 @@ if (!job) {
   process.exit(1)
 }
 
-const markerId = job.id.replace(/[^a-zA-Z0-9]/g, "").slice(-10)
-const startMarker = `<<${markerId}>>`
-const endMarker = `<</${markerId}>>`
-const wrappedPrompt = `For machine parsing, reply in one message with exact format ${startMarker} your-answer ${endMarker}. No code fences. No extra commentary outside markers. User request: ${job.prompt}`
-
-await runLocal(localScript(scriptDir, "pi-worker-delegate"), [session, wrappedPrompt])
+await backend.submitPrompt(job)
 
 const deadline = Date.now() + timeoutSeconds * 1000
 while (Date.now() < deadline) {
   await queue.heartbeatLease(job.id)
-  const pane = await runLocal("tmux", ["capture-pane", "-J", "-pt", `${session}:0`, "-S", `-${captureLines}`]).catch(() => "")
-  const answer = extractAnswer(pane, startMarker, endMarker)
+  const answer = await backend.readResult(job)
   if (answer) {
     await queue.completeJob(job.id, answer)
     console.log(JSON.stringify({ ok: true, id: job.id }))
