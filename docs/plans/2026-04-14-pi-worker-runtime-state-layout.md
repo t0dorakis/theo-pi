@@ -244,10 +244,23 @@ Required fields:
 }
 ```
 
+Failure example:
+
+```json
+{
+  "id": "2026-04-16T10-00-00Z-uuid",
+  "backendId": "tmux",
+  "completedAt": "2026-04-16T10:05:30Z",
+  "status": "failed",
+  "error": "timeout waiting for answer markers after 600s"
+}
+```
+
 Purpose:
 - give queue, gateway, and Telegram layers one explicit result contract
 - remove pane-scraping assumptions from higher layers
 - preserve backend replaceability
+- let only backend layer own any temporary pane parsing bridge
 
 ## `jobs/leases/`
 

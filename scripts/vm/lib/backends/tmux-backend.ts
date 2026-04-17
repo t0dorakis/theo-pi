@@ -1,4 +1,6 @@
 import type { WorkerBackend } from "../backend"
+import { createResultChannel } from "../result-channel"
+import { nowIso } from "../time"
 import type { WorkerJob } from "../types"
 
 export function markerPair(jobId: string) {
@@ -28,19 +30,39 @@ export function createTmuxBackend(options: {
   session: string
   captureLines?: number
   delegateScript?: string
+  stateDir?: string
   runLocal: (command: string, args?: string[]) => Promise<string>
 }): WorkerBackend {
   const captureLines = options.captureLines ?? 500
+  const resultChannel = options.stateDir ? createResultChannel(options.stateDir) : null
 
   return {
     async submitPrompt(job: WorkerJob) {
       await options.runLocal(options.delegateScript ?? "pi-worker-delegate", [options.session, formatDelegatedPrompt(job)])
     },
     async readResult(job: WorkerJob) {
+      if (resultChannel) {
+        try {
+          const result = await resultChannel.readResult(job.id)
+          return result.status === "done" ? (result.answer ?? null) : null
+        } catch {
+          // fall through until result file exists
+        }
+      }
       const pane = await options
         .runLocal("tmux", ["capture-pane", "-J", "-pt", `${options.session}:0`, "-S", `-${captureLines}`])
         .catch(() => "")
-      return extractAnswerFromPane(pane, job.id)
+      const answer = extractAnswerFromPane(pane, job.id)
+      if (answer && resultChannel) {
+        await resultChannel.writeResult({
+          id: job.id,
+          backendId: "tmux",
+          status: "done",
+          answer,
+          completedAt: nowIso(),
+        })
+      }
+      return answer
     },
     async sessionHealth() {
       try {

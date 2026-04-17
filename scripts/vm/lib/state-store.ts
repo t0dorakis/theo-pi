@@ -5,6 +5,26 @@ import { readJsonFile, writeJsonFile } from "./json-file"
 import { getRuntimePaths } from "./paths"
 import type { HealthState, SessionState, WorkerJob } from "./types"
 
+type JobRequestRecord = {
+  id: string
+  backendId: string
+  createdAt?: string
+  acceptedAt?: string | null
+  leaseOwner?: string | null
+  leaseExpiresAt?: string | null
+  resultChannel?: string | null
+  request: { prompt: string }
+}
+
+type JobResultRecord = {
+  id: string
+  backendId: string
+  status: "done" | "failed"
+  answer?: string | null
+  error?: string | null
+  completedAt: string
+}
+
 function normalizeJob(job: WorkerJob): WorkerJob {
   return {
     ...job,
@@ -65,6 +85,21 @@ export function createStateStore(stateDir: string) {
           .map(async (file) => readJsonFile<WorkerJob>(join(paths.telegramJobsDir, file))),
       )
       return jobs.filter((job): job is WorkerJob => Boolean(job)).map(normalizeJob)
+    },
+    async readJobRequest(id: string) {
+      return readJsonFile<JobRequestRecord>(join(paths.jobRequestsDir, `${id}.json`))
+    },
+    async writeJobRequest(request: JobRequestRecord) {
+      await writeJsonFile(join(paths.jobRequestsDir, `${request.id}.json`), request)
+    },
+    async readJobResult(id: string) {
+      return readJsonFile<JobResultRecord>(join(paths.jobResultsDir, `${id}.json`))
+    },
+    async writeJobResult(result: JobResultRecord) {
+      await writeJsonFile(join(paths.jobResultsDir, `${result.id}.json`), result)
+    },
+    async writeRawJobResult(id: string, value: unknown) {
+      await writeJsonFile(join(paths.jobResultsDir, `${id}.json`), value)
     },
   }
 }

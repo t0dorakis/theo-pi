@@ -6,6 +6,7 @@ import { createTmuxBackend } from "./lib/backends/tmux-backend"
 import { getRuntimeEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
 import { getScriptDir, localScript } from "./lib/paths"
+import { createResultChannel } from "./lib/result-channel"
 
 const execFileAsync = promisify(execFile)
 const env = getRuntimeEnv()
@@ -15,6 +16,7 @@ const session = env.session
 const timeoutSeconds = env.jobTimeoutSeconds
 const pollIntervalMs = env.jobPollIntervalMs
 const captureLines = env.jobCaptureLines
+const resultChannel = createResultChannel(env.stateDir)
 
 async function runLocal(command: string, args: string[] = []) {
   const { stdout, stderr } = await execFileAsync(command, args, {
@@ -32,6 +34,7 @@ const backend = createTmuxBackend({
   session,
   captureLines,
   delegateScript: localScript(scriptDir, "pi-worker-delegate"),
+  stateDir: env.stateDir,
   runLocal,
 })
 
@@ -53,6 +56,15 @@ if (!job) {
   process.exit(1)
 }
 
+await resultChannel.writeRequest({
+  id: job.id,
+  backendId: job.backend ?? "tmux",
+  prompt: job.prompt,
+  acceptedAt: new Date().toISOString(),
+  leaseOwner: job.leaseOwner ?? null,
+  leaseExpiresAt: job.leaseExpiresAt ?? null,
+})
+
 await backend.submitPrompt(job)
 
 const deadline = Date.now() + timeoutSeconds * 1000
@@ -61,13 +73,20 @@ while (Date.now() < deadline) {
   const answer = await backend.readResult(job)
   if (answer) {
     await queue.completeJob(job.id, answer)
-    console.log(JSON.stringify({ ok: true, id: job.id }))
+    console.log(JSON.stringify({ ok: true, id: job.id, resultPath: resultChannel.resultPath(job.id) }))
     process.exit(0)
   }
   await sleep(pollIntervalMs)
 }
 
 const error = `timeout waiting for answer markers after ${timeoutSeconds}s`
+await resultChannel.writeResult({
+  id: job.id,
+  backendId: job.backend ?? "tmux",
+  status: "failed",
+  error,
+  completedAt: new Date().toISOString(),
+})
 await queue.failJob(job.id, error)
 console.error(error)
 process.exit(1)
