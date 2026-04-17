@@ -28,7 +28,7 @@ When external control surfaces are added later, the architecture should include 
 
 3. **gateway**
    - receive requests from external clients
-   - route them to the supervised runtime
+   - route them to runtime-core APIs and explicit job/result contracts
    - return status or results
 
 4. **runtime control plane**
@@ -40,20 +40,20 @@ When external control surfaces are added later, the architecture should include 
 A future Telegram-style flow should look like:
 
 ```text
-Telegram webhook -> validator -> wake hook -> gateway -> supervisor/runtime -> Pi
+Telegram webhook -> validator -> wake hook -> gateway -> runtime API -> execution backend -> Pi
 ```
 
 Not:
 
 ```text
-Telegram code -> direct Pi process manipulation
+Telegram code -> direct shell bridge -> Pi process manipulation
 ```
 
 This separation keeps channels replaceable and reduces risk of control-path sprawl inside Pi runtime code.
 
 ## Likely First Gateway Shape
 
-When Theo does add a gateway, the simplest useful shape is likely:
+When Theo does add a gateway, simplest useful shape should be runtime-API-first rather than shell-bridge-first:
 
 ### `POST /run`
 Submit one prompt or command to the worker.
@@ -61,7 +61,7 @@ Submit one prompt or command to the worker.
 ### `GET /health`
 Return machine-readable worker health.
 
-These two endpoints are enough for a first proof-of-concept and align with the existing health contract.
+These two endpoints are enough for first proof-of-concept and should call shared runtime APIs rather than inline shell orchestration.
 
 ## Expected Signal Shape
 
