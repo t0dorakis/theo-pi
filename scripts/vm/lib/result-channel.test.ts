@@ -25,6 +25,15 @@ test("request file written and result file discovered", async () => {
   await expect(channel.readResult("job-1")).resolves.toMatchObject({ answer: "pong", status: "done" })
 })
 
+test("failed result preserves error text", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-worker-result-"))
+  tempDirs.push(root)
+  const channel = createResultChannel(root)
+
+  await channel.writeResult({ id: "job-1", backendId: "tmux", status: "failed", error: "missing or malformed <final_answer> block", completedAt: "2026-04-16T10:00:00Z" })
+  await expect(channel.readResult("job-1")).resolves.toMatchObject({ status: "failed", error: "missing or malformed <final_answer> block" })
+})
+
 test("malformed result rejected", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-worker-result-"))
   tempDirs.push(root)

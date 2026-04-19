@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 
 import type { WorkerJob } from "../types"
-import { createTmuxBackend, formatDelegatedPrompt } from "./tmux-backend"
+import { createTmuxBackend, extractAnswerFromPane, formatDelegatedPrompt, markerPair } from "./tmux-backend"
 
 test("tmux backend formats delegated prompt request", () => {
   const job: WorkerJob = {
@@ -17,9 +17,15 @@ test("tmux backend formats delegated prompt request", () => {
   }
 
   const prompt = formatDelegatedPrompt(job)
-  expect(prompt).toContain("For machine parsing")
+  expect(prompt).toContain("Return your final answer only inside these exact XML tags")
   expect(prompt).toContain("Reply with exactly: pong")
-  expect(prompt).toContain("<<")
+  expect(prompt).toContain("<final_answer")
+})
+
+test("tmux backend extracts answer from final_answer xml block", () => {
+  const { startMarker, endMarker } = markerPair("job-1234567890")
+  const pane = `noise\n${startMarker}\npong\n${endMarker}\n`
+  expect(extractAnswerFromPane(pane, "job-1234567890")).toBe("pong")
 })
 
 test("tmux backend session health surfaces executor result", async () => {

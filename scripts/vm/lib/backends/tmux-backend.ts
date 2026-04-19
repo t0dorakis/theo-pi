@@ -6,14 +6,26 @@ import type { WorkerJob } from "../types"
 export function markerPair(jobId: string) {
   const markerId = jobId.replace(/[^a-zA-Z0-9]/g, "").slice(-10)
   return {
-    startMarker: `<<${markerId}>>`,
-    endMarker: `<</${markerId}>>`,
+    startMarker: `<final_answer id="${markerId}">`,
+    endMarker: "</final_answer>",
   }
 }
 
 export function formatDelegatedPrompt(job: WorkerJob) {
   const { startMarker, endMarker } = markerPair(job.id)
-  return `For machine parsing, reply in one message with exact format ${startMarker} your-answer ${endMarker}. No code fences. No extra commentary outside markers. User request: ${job.prompt}`
+  return [
+    "Return your final answer only inside these exact XML tags.",
+    `Start tag: ${startMarker}`,
+    `End tag: ${endMarker}`,
+    "Rules:",
+    `- Output exactly one ${startMarker} block and one ${endMarker}.`,
+    "- Put only final answer text between tags.",
+    "- No text before start tag.",
+    "- No text after end tag.",
+    "- No markdown fences.",
+    "- If you cannot complete request, still return brief explanation inside tags.",
+    `User request: ${job.prompt}`,
+  ].join("\n")
 }
 
 export function extractAnswerFromPane(pane: string, jobId: string) {

@@ -79,7 +79,7 @@ while (Date.now() < deadline) {
   await sleep(pollIntervalMs)
 }
 
-const error = `timeout waiting for answer markers after ${timeoutSeconds}s`
+const error = `missing or malformed <final_answer> block after ${timeoutSeconds}s`
 await resultChannel.writeResult({
   id: job.id,
   backendId: job.backend ?? "tmux",
