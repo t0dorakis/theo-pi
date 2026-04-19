@@ -16,6 +16,7 @@ const session = env.session
 const host = env.gatewayHost
 const port = env.gatewayPort
 const bearerToken = env.gatewayToken
+const telegramWebhookSecret = env.telegramWebhookSecret
 const telegramToken = env.telegramBotToken
 const telegramAllowedChats = env.telegramAllowedChatIds
 const logsLines = env.telegramLogLines
@@ -52,9 +53,14 @@ function text(body: string, init: ResponseInit = {}) {
 }
 
 function isAuthorized(request: Request) {
-  if (!bearerToken) return true
   const header = request.headers.get("authorization") ?? ""
   return header === `Bearer ${bearerToken}`
+}
+
+function webhookAuthorized(request: Request) {
+  if (!telegramWebhookSecret) return false
+  const header = request.headers.get("x-telegram-bot-api-secret-token") ?? ""
+  return header === telegramWebhookSecret
 }
 
 async function runLocal(command: string, args: string[] = []) {
@@ -164,13 +170,22 @@ async function handleTelegramCommand(message: TelegramMessage) {
   return { ok: true }
 }
 
+if (!bearerToken) {
+  console.error("Missing PI_WORKER_GATEWAY_TOKEN")
+  process.exit(1)
+}
+
 const server = Bun.serve({
   hostname: host,
   port,
   async fetch(request: Request) {
     const url = new URL(request.url)
 
-    if (url.pathname !== "/health" && url.pathname !== "/telegram/webhook" && !isAuthorized(request)) {
+    if (url.pathname === "/telegram/webhook") {
+      if (!webhookAuthorized(request)) {
+        return text("unauthorized", { status: 401 })
+      }
+    } else if (url.pathname !== "/health" && !isAuthorized(request)) {
       return text("unauthorized", { status: 401 })
     }
 

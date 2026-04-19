@@ -5,6 +5,7 @@ export type RuntimeEnv = {
   gatewayHost: string
   gatewayPort: number
   gatewayToken: string
+  telegramWebhookSecret: string
   telegramBotToken: string
   telegramAllowedChatIds: Set<string>
   telegramPollTimeoutSeconds: number
@@ -31,6 +32,7 @@ export function getRuntimeEnv(): RuntimeEnv {
     gatewayHost: process.env.PI_WORKER_GATEWAY_HOST ?? "127.0.0.1",
     gatewayPort: intFromEnv("PI_WORKER_GATEWAY_PORT", 8787),
     gatewayToken: process.env.PI_WORKER_GATEWAY_TOKEN ?? "",
+    telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET ?? "",
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
     telegramAllowedChatIds: new Set(
       (process.env.TELEGRAM_ALLOWED_CHAT_IDS ?? "")
