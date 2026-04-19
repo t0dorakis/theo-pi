@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const piPkg = await import('file:///Users/minimi/.local/share/fnm/node-versions/v24.14.0/installation/lib/node_modules/@mariozechner/pi-coding-agent/dist/index.js');
 const { DefaultResourceLoader, SessionManager, createAgentSession } = piPkg;
 
-const root = path.resolve(process.cwd());
-const fixtureDir = path.join(root, 'dogfood', 'task-loop-e2e');
-const extensionPath = path.join(root, 'packages', 'pi-task-loop', 'extensions', 'task-loop.ts');
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const packageDir = path.resolve(scriptDir, '..');
+const fixtureDir = path.join(packageDir, 'tests', 'task-loop-e2e');
+const extensionPath = path.join(packageDir, 'extensions', 'task-loop.ts');
 const timeoutMs = 12 * 60 * 1000;
 const pollMs = 5_000;
 

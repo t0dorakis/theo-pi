@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "active": false,
+  "iteration": 1,
+  "intervalSeconds": 15,
+  "lastTickAt": "2026-04-16T15:16:34.073Z",
+  "lastPrompt": "[task-loop tick] iteration 1\nAutonomous continuation tick.\nResume established work only.\nRead `.agent/progress.md` first.\nUse the task-loop task tool as source of truth for task state instead of hand-editing `.agent/tasks.json`.\nChoose highest-value active task already implied by repo state and prior instructions.\nComplete at most ONE task in this tick.\nAfter that one task is done, update `.agent/progress.md`, record task state with the task tool, run focused verification if feasible, then stop.\nDo not batch multiple tasks into one tick unless they are inseparable parts of the same atomic fix.\nContinue without asking unless blocked by irreversible action, external side effect, missing credentials, or a real product/business choice.\nKeep commentary minimal.\n\nCurrent active tasks:\n- task-1 [pending] Implement sum for numeric arrays\n- task-2 [pending] Implement average with empty-array fallback\n- task-3 [pending] Implement median for odd and even arrays\n- task-4 [pending] Implement mode with deterministic tie break\n- task-5 [pending] Implement normalizeWhitespace\n\nOperator context:\nDogfood the task-loop extension in this repo. Work only inside this fixture repo. Complete all 10 tasks in .agent/tasks.json. Keep .agent/progress.md and .agent/tasks.json accurate as work progresses. Run npm test before claiming completion. Continue autonomously until all tasks are truly done or a real blocker exists.",
+  "lastStopReason": "no active tasks"
+}

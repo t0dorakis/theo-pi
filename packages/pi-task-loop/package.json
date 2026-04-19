@@ -25,9 +25,13 @@
   },
   "files": [
     "extensions/",
+    "tests/",
     "README.md",
     "package.json"
   ],
+  "scripts": {
+    "dogfood:e2e": "node ./tests/run-task-loop-e2e.mjs"
+  },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*",
     "@sinclair/typebox": "*"

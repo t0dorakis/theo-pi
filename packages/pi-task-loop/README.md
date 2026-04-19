@@ -63,3 +63,10 @@ Phase 1 keeps state and scheduling local to the current Pi runtime. Event monito
 cd /absolute/path/to/theo-pi
 npx tsx packages/pi-task-loop/extensions/task-loop.ts
 ```
+
+## Dogfood E2E
+
+```bash
+cd /absolute/path/to/theo-pi
+npm run dogfood:e2e --workspace packages/pi-task-loop
+```

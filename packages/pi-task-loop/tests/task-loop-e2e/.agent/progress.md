@@ -15,6 +15,7 @@
 - Implemented `chunk(values, size)` in `src/lib.js`.
 - Implemented `parseCsvLine(line)` in `src/lib.js` with quote handling.
 - Updated `README.md` examples with expected outputs.
+- Ran final `npm test`; all 10 tests passed.
 
 ## Verification
 - `node --test --test-name-pattern='sum handles normal and empty arrays' test/lib.test.js`

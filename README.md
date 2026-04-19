@@ -103,6 +103,13 @@ find ~/.agents/skills/auto -maxdepth 2 -name SKILL.md
 /task-loop context focus on highest-value unfinished repo task first
 ```
 
+Dogfood E2E:
+
+```bash
+cd /Users/theo/repos/theo-pi
+npm run dogfood:e2e --workspace packages/pi-task-loop
+```
+
 ## Manual override
 
 If you ever want to force immediate capture of the current workflow, the package also provides:
