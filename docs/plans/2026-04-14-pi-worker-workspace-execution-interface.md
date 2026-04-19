@@ -23,6 +23,17 @@ In v1 that backend is local directories on the VM. Later it may be:
 
 The first interface should expose only the operations the worker actually needs.
 
+## Backend Runtime Methods
+
+Beyond file/workspace primitives, runtime core should speak to execution backends through explicit request/result methods:
+
+- `submitPrompt(request)`
+- `readResult(requestId)`
+- `cancel(requestId)`
+- `sessionHealth()`
+
+These methods let queue, gateway, and Telegram layers depend on a stable backend contract instead of direct `tmux` behavior.
+
 ## `read`
 
 Read file content from a workspace path.
@@ -76,6 +87,38 @@ Expected use:
 - pre-self-update safety
 - pre-refactor safety
 - pre-destructive operation safety
+
+## `submitPrompt(request)`
+
+Submit a normalized worker request to execution backend.
+
+Expected use:
+- enqueue accepted prompt for active backend
+- isolate queue/gateway layers from backend-specific injection details
+
+## `readResult(requestId)`
+
+Read normalized result for one request id.
+
+Expected use:
+- poll or fetch explicit result-channel output
+- keep result parsing behind backend boundary
+
+## `cancel(requestId)`
+
+Cancel accepted or running request when backend supports it.
+
+Expected use:
+- operator queue control
+- stale job cleanup
+
+## `sessionHealth()`
+
+Return backend-scoped session health.
+
+Expected use:
+- distinguish runtime-core health from backend execution health
+- confirm active session still able to accept prompt execution
 
 ## Scope Rules
 
@@ -140,6 +183,10 @@ The v1 contract should stay focused on:
 - executing
 - finding
 - checkpointing
+- submitting prompt requests
+- reading request results
+- cancelling requests
+- reporting backend session health
 
 ## Operational Guidance
 
@@ -160,5 +207,6 @@ The initial interface does **not** need to:
 
 This spec is successful if:
 - the worker runtime can speak about workspace operations as a bounded contract
+- runtime core can call explicit backend methods without knowing `tmux` details
 - the first implementation remains simple on the local VM
 - future container or remote sandbox experiments would not require redesigning the whole worker runtime

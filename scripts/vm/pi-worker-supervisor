@@ -241,7 +241,7 @@ launch_pi_session() {
     tmux kill-session -t "$session" >/dev/null 2>&1 || true
   fi
 
-  tmux new-session -d -s "$session" "cd '$workspace' && if [[ -f \"$HOME/.env.pi\" ]]; then source \"$HOME/.env.pi\"; fi && exec pi"
+  tmux new-session -d -s "$session" "cd '$workspace' && if [[ -f \"$HOME/.env.pi\" ]]; then source \"$HOME/.env.pi\"; fi && exec pi ${PI_WORKER_PI_ARGS:-}"
 }
 
 refresh_health_for_session() {

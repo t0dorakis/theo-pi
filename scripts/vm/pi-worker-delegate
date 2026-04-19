@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+usage:
+  pi-worker-delegate <session> <prompt>
+  echo "prompt" | pi-worker-delegate <session>
+EOF
+  exit 1
+}
+
+SESSION="${1:-}"
+[[ -n "$SESSION" ]] || usage
+shift || true
+
+if [[ $# -gt 0 ]]; then
+  PROMPT="$*"
+else
+  PROMPT="$(cat)"
+fi
+
+[[ -n "$PROMPT" ]] || { echo "empty prompt" >&2; exit 1; }
+
+tmux has-session -t "$SESSION" 2>/dev/null || { echo "tmux session not found: $SESSION" >&2; exit 1; }
+
+BUFFER_NAME="pi-worker-delegate-${SESSION}-$$"
+printf '%s' "$PROMPT" | tmux load-buffer -b "$BUFFER_NAME" -
+tmux paste-buffer -d -b "$BUFFER_NAME" -t "$SESSION":0
+# Send Enter separately so multiline prompts paste cleanly first.
+tmux send-keys -t "$SESSION":0 Enter
+
+echo "delegated to $SESSION"

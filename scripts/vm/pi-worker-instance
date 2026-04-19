@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+VM_NAME="${PI_WORKER_VM_NAME:-theo-pi}"
+VM_REPO_DIR="${PI_WORKER_VM_REPO_DIR:-$HOME/workspaces/theo-pi}"
+STATE_DIR='${PI_WORKER_STATE_DIR:-$HOME/.pi-worker}'
+SESSION="${PI_WORKER_SESSION:-theo-pi}"
+REMOTE_ARCHIVE="/tmp/pi-worker-instance-sync.tgz"
+
+SMART_SYNC_FILES=(
+  "scripts/vm/lib"
+  "scripts/vm/pi-worker-run-job.ts"
+  "scripts/vm/pi-worker-submit-job.ts"
+  "scripts/vm/pi-worker-gateway.ts"
+  "scripts/vm/pi-worker-telegram-bot.ts"
+  "scripts/vm/pi-worker-gateway"
+  "scripts/vm/pi-worker-telegram-bot"
+  "scripts/vm/pi-worker-run-job"
+  "scripts/vm/pi-worker-submit-job"
+  "scripts/vm/pi-worker-instance"
+)
+
+usage() {
+  cat <<'EOF'
+usage:
+  pi-worker-instance status
+  pi-worker-instance restart [gateway|bot|supervisor|all]
+  pi-worker-instance logs [gateway|bot|supervisor|worker]
+  pi-worker-instance sync [paths...] [--restart target]
+  pi-worker-instance clean-stuck
+EOF
+}
+
+run_vm() {
+  orbctl run -m "$VM_NAME" bash -lc "$1"
+}
+
+join_by_space() {
+  local IFS=' '
+  printf '%s' "$*"
+}
+
+restart_target() {
+  local target="${1:-all}"
+  case "$target" in
+    gateway)
+      run_vm "tmux kill-session -t theo-pi-gateway >/dev/null 2>&1 || true; cd ~/workspaces/theo-pi && tmux new-session -d -s theo-pi-gateway 'source ~/.env.pi 2>/dev/null || true; ~/bin/pi-worker-gateway'"
+      ;;
+    bot)
+      run_vm "tmux kill-session -t theo-pi-telegram-bot >/dev/null 2>&1 || true; cd ~/workspaces/theo-pi && tmux new-session -d -s theo-pi-telegram-bot 'source ~/.env.pi 2>/dev/null || true; ~/bin/pi-worker-telegram-bot'"
+      ;;
+    supervisor)
+      run_vm "~/bin/pi-worker-restart '$SESSION'"
+      ;;
+    all)
+      restart_target gateway
+      restart_target bot
+      ;;
+    *)
+      echo "unknown restart target: $target" >&2
+      exit 1
+      ;;
+  esac
+}
+
+status_cmd() {
+  run_vm "echo 'tmux sessions'; tmux ls 2>/dev/null || true; echo; echo 'worker status'; ~/bin/pi-worker-status '$SESSION' --json 2>/dev/null || true; echo; echo 'active runners'; ps -ef | grep -E 'pi-worker-run-job|pi-worker-gateway|pi-worker-telegram-bot' | grep -v grep || true; echo; echo 'latest telegram job'; latest=\$(ls -t ~/.pi-worker/telegram/jobs/*.json 2>/dev/null | head -n 1); [ -n \"\$latest\" ] && jq . \"\$latest\" || true; echo; echo 'latest result'; latest=\$(ls -t ~/.pi-worker/jobs/results/*.json 2>/dev/null | head -n 1); [ -n \"\$latest\" ] && jq . \"\$latest\" || true"
+}
+
+logs_cmd() {
+  local target="${1:-gateway}"
+  case "$target" in
+    gateway)
+      run_vm "tmux capture-pane -pt theo-pi-gateway:0 -S -120"
+      ;;
+    bot)
+      run_vm "tmux capture-pane -pt theo-pi-telegram-bot:0 -S -120"
+      ;;
+    supervisor)
+      run_vm "tail -n 120 ~/.pi-worker/supervisor.log 2>/dev/null || true"
+      ;;
+    worker)
+      run_vm "tmux capture-pane -pt '$SESSION':0 -S -180"
+      ;;
+    *)
+      echo "unknown logs target: $target" >&2
+      exit 1
+      ;;
+  esac
+}
+
+sync_cmd() {
+  local restart_after=""
+  local sync_paths=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --restart)
+        restart_after="${2:-}"
+        shift 2
+        ;;
+      *)
+        sync_paths+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  if [[ ${#sync_paths[@]} -eq 0 ]]; then
+    sync_paths=("${SMART_SYNC_FILES[@]}")
+  fi
+
+  local existing=()
+  local path
+  for path in "${sync_paths[@]}"; do
+    if [[ -e "$ROOT_DIR/$path" ]]; then
+      existing+=("$path")
+    elif [[ -e "$path" ]]; then
+      existing+=("${path#$ROOT_DIR/}")
+    else
+      echo "skip missing path: $path" >&2
+    fi
+  done
+
+  [[ ${#existing[@]} -gt 0 ]] || {
+    echo "no files to sync" >&2
+    exit 1
+  }
+
+  local archive="/tmp/pi-worker-instance-sync.tgz"
+  (cd "$ROOT_DIR" && tar -czf "$archive" "${existing[@]}")
+  orbctl push -m "$VM_NAME" "$archive" "$REMOTE_ARCHIVE" >/dev/null
+  run_vm "cd ~/workspaces/theo-pi && tar -xzf '$REMOTE_ARCHIVE'"
+
+  if [[ -n "$restart_after" ]]; then
+    restart_target "$restart_after"
+  else
+    if printf '%s\n' "${existing[@]}" | grep -q 'pi-worker-gateway'; then
+      restart_target gateway
+    fi
+    if printf '%s\n' "${existing[@]}" | grep -q 'pi-worker-telegram-bot\|pi-worker-run-job\|pi-worker-submit-job\|scripts/vm/lib'; then
+      restart_target bot
+    fi
+  fi
+
+  echo "synced: $(join_by_space "${existing[@]}")"
+}
+
+clean_stuck_cmd() {
+  run_vm '
+    pkill -f "pi-worker-run-job" >/dev/null 2>&1 || true
+    for f in ~/.pi-worker/telegram/jobs/*.json; do
+      [ -f "$f" ] || continue
+      status=$(jq -r ".status // empty" "$f")
+      lease=$(jq -r ".leaseExpiresAt // empty" "$f")
+      if [ "$status" = "running" ] && [ -n "$lease" ]; then
+        now=$(date -u +%s)
+        lease_epoch=$(python3 - <<PY "$lease"
+from datetime import datetime, timezone
+import sys
+print(int(datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00")).timestamp()))
+PY
+)
+        if [ "$lease_epoch" -le "$now" ]; then
+          tmp=$(mktemp)
+          jq ".status=\"failed\" | .error=\"clean-stuck marked stale running job failed\" | .completedAt=\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" | .leaseOwner=null | .leaseExpiresAt=null" "$f" > "$tmp" && mv "$tmp" "$f"
+          echo "cleaned $f"
+        fi
+      fi
+    done
+  '
+}
+
+cmd="${1:-}"
+shift || true
+case "$cmd" in
+  status) status_cmd "$@" ;;
+  restart) restart_target "${1:-all}" ;;
+  logs) logs_cmd "${1:-gateway}" ;;
+  sync) sync_cmd "$@" ;;
+  clean-stuck) clean_stuck_cmd ;;
+  *) usage; exit 1 ;;
+esac

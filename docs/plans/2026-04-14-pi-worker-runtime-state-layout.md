@@ -25,6 +25,12 @@ Recommended initial layout:
   supervisor.log
   sessions/
   checkpoints/
+  telegram/
+    jobs/
+  jobs/
+    requests/
+    results/
+    leases/
 ```
 
 This directory should be owned by the runtime user (`piagent`) and not require root.
@@ -166,6 +172,125 @@ Purpose:
 - make risky operations explicit
 - support operator recovery after failed self-update or bad autonomous change
 
+## `telegram/jobs/`
+
+Transport-local job metadata for Telegram delivery state.
+
+Possible examples:
+
+```text
+~/.pi-worker/telegram/jobs/
+  2026-04-16T10-00-00Z-uuid.json
+```
+
+Purpose:
+- preserve Telegram-specific queue and delivery history during transition
+- track chat delivery state separately from backend-neutral runtime job contracts
+- let Telegram adapter remain compatible while core queue moves into `jobs/`
+
+## `jobs/requests/`
+
+Canonical backend-neutral request channel.
+
+Possible examples:
+
+```text
+~/.pi-worker/jobs/requests/
+  2026-04-16T10-00-00Z-uuid.json
+```
+
+Required fields:
+
+```json
+{
+  "id": "2026-04-16T10-00-00Z-uuid",
+  "backendId": "tmux",
+  "createdAt": "2026-04-16T10:00:00Z",
+  "acceptedAt": "2026-04-16T10:00:01Z",
+  "leaseOwner": "telegram-runner-1",
+  "leaseExpiresAt": "2026-04-16T10:05:01Z",
+  "resultChannel": "file:~/.pi-worker/jobs/results/2026-04-16T10-00-00Z-uuid.json",
+  "request": {
+    "prompt": "Reply with exactly: pong"
+  }
+}
+```
+
+Purpose:
+- hold normalized prompt requests independent from transport
+- give runtime core one canonical request contract
+- let transports and backends coordinate through files without sharing process memory
+
+## `jobs/results/`
+
+Canonical backend-neutral result channel.
+
+Possible examples:
+
+```text
+~/.pi-worker/jobs/results/
+  2026-04-16T10-00-00Z-uuid.json
+```
+
+Required fields:
+
+```json
+{
+  "id": "2026-04-16T10-00-00Z-uuid",
+  "backendId": "tmux",
+  "completedAt": "2026-04-16T10:00:30Z",
+  "status": "done",
+  "answer": "pong"
+}
+```
+
+Failure example:
+
+```json
+{
+  "id": "2026-04-16T10-00-00Z-uuid",
+  "backendId": "tmux",
+  "completedAt": "2026-04-16T10:05:30Z",
+  "status": "failed",
+  "error": "timeout waiting for answer markers after 600s"
+}
+```
+
+Purpose:
+- give queue, gateway, and Telegram layers one explicit result contract
+- remove pane-scraping assumptions from higher layers
+- preserve backend replaceability
+- let only backend layer own any temporary pane parsing bridge
+
+## `jobs/leases/`
+
+Lease/claim metadata for queue workers.
+
+Possible examples:
+
+```text
+~/.pi-worker/jobs/leases/
+  2026-04-16T10-00-00Z-uuid.json
+```
+
+Suggested fields:
+
+```json
+{
+  "id": "2026-04-16T10-00-00Z-uuid",
+  "backendId": "tmux",
+  "acceptedAt": "2026-04-16T10:00:01Z",
+  "leaseOwner": "telegram-runner-1",
+  "leaseExpiresAt": "2026-04-16T10:05:01Z",
+  "resultChannel": "file:~/.pi-worker/jobs/results/2026-04-16T10-00-00Z-uuid.json"
+}
+```
+
+Purpose:
+- make queue claims explicit and recoverable
+- support stale-lease recovery
+- separate request payload from runtime claim metadata
+
 ## Update Rules
 
 ## Supervisor responsibilities
@@ -214,6 +339,22 @@ Suggested timing rules:
   - before risky autonomous workspace mutation
   - after successful milestone or stabilization point
 
+- `jobs/requests/`
+  - when a normalized runtime request is accepted
+  - before backend execution begins
+
+- `jobs/leases/`
+  - when a worker claims a request
+  - whenever lease owner or expiry changes
+
+- `jobs/results/`
+  - when backend completes or fails a request
+  - whenever result payload is finalized for adapter delivery
+
+- `telegram/jobs/`
+  - when Telegram-specific delivery metadata changes
+  - after final answer or failure reaches chat
+
 ## Recovery Usage
 
 During recovery, Theo should be able to answer these questions quickly from the state layout:
@@ -248,5 +389,18 @@ Possible future additions:
 - `gateway.json` for external control plane metadata
 - `metrics.json` for lightweight counters
 - `locks/` for coordination if multiple helpers are added later
+
+## Contract Notes
+
+Reserved cross-cutting fields for request/lease/result contracts:
+- `id`: canonical request id
+- `backendId`: backend implementation name such as `tmux`
+- `acceptedAt`: when runtime accepted request for execution
+- `completedAt`: when runtime finished request
+- `leaseOwner`: worker currently holding claim
+- `leaseExpiresAt`: stale-lease recovery timestamp
+- `resultChannel`: where higher layers should read normalized result
+
+These fields should remain stable across transport adapters and future backends.
 
 These are intentionally out of scope for the first milestone.

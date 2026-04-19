@@ -26,6 +26,15 @@
   "workspaces": [
     "packages/*"
   ],
+  "scripts": {
+    "check": "node --check scripts/vm/pi-worker-gateway.ts scripts/vm/pi-worker-telegram-bot.ts scripts/vm/pi-worker-submit-job.ts scripts/vm/pi-worker-run-job.ts",
+    "check:ts": "bunx tsc --noEmit",
+    "test:vm": "bash scripts/vm/pi-worker-supervisor-smoke-test && bash scripts/vm/pi-worker-gateway-smoke-test"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "latest"
+  },
   "pi": {
     "extensions": [
       "./packages/pi-auto-skills/extensions/auto-skills.ts",
