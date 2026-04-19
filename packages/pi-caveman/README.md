@@ -71,3 +71,7 @@ This package is deliberately minimal.
 - no ultra mode
 - no wenyan mode
 - no mode-switch commands
+
+## Conceptual note on agent behaviour rules
+
+`SKILL.md` currently includes one agent behaviour rule ("act first, report after") that doesn't conceptually belong in a communication-style skill. It lives here because the caveman extension is the only always-on global system prompt injection mechanism available without a separate global `~/.pi/agent/AGENTS.md`. If a global AGENTS.md is created in the future, that rule should move there and be removed from `SKILL.md` to keep concerns separated.
