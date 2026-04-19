@@ -38,7 +38,11 @@
   "pi": {
     "extensions": [
       "./packages/pi-auto-skills/extensions/auto-skills.ts",
-      "./packages/pi-caveman/extensions/caveman.ts"
+      "./packages/pi-caveman/extensions/caveman.ts",
+      "./packages/pi-task-loop/extensions/task-loop.ts"
     ]
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.49"
   }
 }

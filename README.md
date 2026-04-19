@@ -16,6 +16,12 @@ Minimal caveman-mode extension for Pi.
 Location:
 - `packages/pi-caveman`
 
+### `pi-task-loop`
+Pi-native autonomous continuation loop for established repo tasks.
+
+Location:
+- `packages/pi-task-loop`
+
 ## Prerequisites
 
 - [Pi](https://pi.dev) installed
@@ -33,6 +39,7 @@ The repo root is configured as a Pi package and currently installs:
 
 - `pi-auto-skills`
 - `pi-caveman`
+- `pi-task-loop`
 
 ### From a local checkout
 
@@ -84,6 +91,24 @@ find ~/.agents/skills/auto -maxdepth 2 -name SKILL.md
 - includes a reusable `packages/pi-caveman/APPEND_SYSTEM.md` starter for fresh Pi installs
 - keeps code blocks, commands, file paths, and exact error text unchanged
 - stays intentionally minimal: only full mode, no lite/ultra toggles
+
+## `pi-task-loop` quick use
+
+```text
+/task-loop on
+/task-loop off
+/task-loop once
+/task-loop status
+/task-loop interval 15m
+/task-loop context focus on highest-value unfinished repo task first
+```
+
+Dogfood E2E:
+
+```bash
+cd /Users/theo/repos/theo-pi
+npm run dogfood:e2e --workspace packages/pi-task-loop
+```
 
 ## Manual override
 

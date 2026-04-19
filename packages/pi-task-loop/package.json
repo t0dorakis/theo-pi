@@ -1,0 +1,44 @@
+{
+  "name": "pi-task-loop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pi-native autonomous continuation loop driven by repo task state.",
+  "author": "Theo",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "loop",
+    "autonomy",
+    "tasks"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t0dorakis/theo-pi.git",
+    "directory": "packages/pi-task-loop"
+  },
+  "homepage": "https://github.com/t0dorakis/theo-pi/tree/main/packages/pi-task-loop",
+  "bugs": {
+    "url": "https://github.com/t0dorakis/theo-pi/issues"
+  },
+  "files": [
+    "extensions/",
+    "tests/",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "dogfood:e2e": "node ./tests/run-task-loop-e2e.mjs"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@sinclair/typebox": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/task-loop.ts"
+    ]
+  }
+}
