@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SUPERVISOR="$SCRIPT_DIR/pi-worker-supervisor"
+GATEWAY="$SCRIPT_DIR/pi-worker-gateway.ts"
+
+pass() { printf '[pass] %s\n' "$1"; }
+fail() { printf '[fail] %s\n' "$1"; exit 1; }
+
+TMPDIR_ROOT="$(mktemp -d)"
+GATEWAY_PID=""
+cleanup() {
+  tmux kill-session -t smoke-gateway >/dev/null 2>&1 || true
+  pkill -f 'pi-worker-gateway.ts' >/dev/null 2>&1 || true
+  if [[ -n "$GATEWAY_PID" ]]; then kill "$GATEWAY_PID" >/dev/null 2>&1 || true; fi
+  rm -rf "$TMPDIR_ROOT"
+}
+trap cleanup EXIT
+
+export HOME="$TMPDIR_ROOT/home"
+export PATH="$HOME/bin:$PATH"
+export PI_WORKER_SESSION="smoke-gateway"
+export PI_WORKER_GATEWAY_PORT="${PI_WORKER_GATEWAY_PORT:-18787}"
+export PI_WORKER_GATEWAY_TOKEN=test-token
+export PI_WORKER_HEARTBEAT_INTERVAL_SECONDS=1
+export PI_WORKER_RESTART_DELAY_SECONDS=1
+export PI_WORKER_HEARTBEAT_STALE_SECONDS=5
+mkdir -p "$HOME/bin" "$HOME/workspaces/demo"
+
+cat > "$HOME/bin/pi" <<'EOF'
+#!/usr/bin/env bash
+echo READY
+while IFS= read -r line; do echo "$line"; done
+EOF
+chmod +x "$HOME/bin/pi"
+
+"$SUPERVISOR" start smoke-gateway "$HOME/workspaces/demo" >/dev/null
+sleep 3
+pkill -f 'pi-worker-gateway.ts' >/dev/null 2>&1 || true
+rm -f /tmp/pi-worker-gateway-smoke.log
+nohup bun "$GATEWAY" >/tmp/pi-worker-gateway-smoke.log 2>&1 &
+GATEWAY_PID=$!
+READY=0
+for _ in 1 2 3 4 5 6; do
+  sleep 1
+  if curl -sS "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/health" >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+done
+[[ "$READY" -eq 1 ]] || fail 'gateway started'
+
+curl_json() {
+  curl -sS -H "Authorization: Bearer test-token" "$@"
+}
+
+HEALTH="$(curl -sS "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/health")"
+echo "$HEALTH" | jq -e '.daemonStatus == "running"' >/dev/null || fail 'health endpoint'
+pass 'health endpoint'
+
+RUN_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/run" -H 'content-type: application/json' -d '{"prompt":"hello from gateway"}')"
+echo "$RUN_RESPONSE" | jq -e '.ok == true and .message == "delegated to smoke-gateway"' >/dev/null || fail 'run endpoint ack'
+pass 'run endpoint ack'
+
+RESTART_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/restart")"
+echo "$RESTART_RESPONSE" | jq -e '.ok == true' >/dev/null || fail 'restart endpoint'
+pass 'restart endpoint'
+
+CHECKPOINT_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/checkpoint" -H 'content-type: application/json' -d '{"label":"smoke"}')"
+CHECKPOINT_PATH="$(echo "$CHECKPOINT_RESPONSE" | jq -r '.checkpoint')"
+[[ -f "$CHECKPOINT_PATH" ]] || fail 'checkpoint endpoint'
+pass 'checkpoint endpoint'
+
+LOGS="$(curl_json "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/logs")"
+[[ -n "$LOGS" ]] || fail 'logs endpoint'
+pass 'logs endpoint'
+
+pass 'gateway smoke checks passed'

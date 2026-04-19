@@ -29,6 +29,14 @@ else
   echo "==> Pi already installed: $(pi --version || true)"
 fi
 
+if ! command -v bun >/dev/null 2>&1; then
+  echo "==> Installing Bun"
+  curl -fsSL https://bun.sh/install | bash
+  export PATH="$HOME/.bun/bin:$PATH"
+else
+  echo "==> Bun already installed: $(bun --version)"
+fi
+
 echo "==> Creating worker directories"
 mkdir -p "$HOME/workspaces" "$HOME/logs" "$HOME/bin" "$HOME/.pi/agent" "$HOME/.agents/skills" "$HOME/.pi-worker/checkpoints" "$HOME/.pi-worker/sessions"
 
@@ -67,10 +75,10 @@ git --version
 
 echo "==> Installing local worker command wrappers into ~/bin"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for cmd in pi-worker-supervisor pi-worker-start pi-worker-status pi-worker-restart pi-worker-stop pi-worker-checkpoint pi-worker-tail-logs pi-worker-verify-runtime pi-worker-fail-inject pi-worker-runtime-checklist pi-worker-verify.sh pi-worker-supervisor-smoke-test; do
+for cmd in pi-worker-supervisor pi-worker-start pi-worker-status pi-worker-restart pi-worker-stop pi-worker-checkpoint pi-worker-tail-logs pi-worker-verify-runtime pi-worker-fail-inject pi-worker-runtime-checklist pi-worker-delegate pi-worker-submit-job pi-worker-run-job pi-worker-gateway pi-worker-telegram-bot pi-worker-verify.sh pi-worker-supervisor-smoke-test pi-worker-gateway-smoke-test; do
   ln -sf "$SCRIPT_DIR/$cmd" "$HOME/bin/$cmd"
 done
-chmod +x "$SCRIPT_DIR"/pi-worker-supervisor "$SCRIPT_DIR"/pi-worker-start "$SCRIPT_DIR"/pi-worker-status "$SCRIPT_DIR"/pi-worker-restart "$SCRIPT_DIR"/pi-worker-stop "$SCRIPT_DIR"/pi-worker-checkpoint "$SCRIPT_DIR"/pi-worker-tail-logs "$SCRIPT_DIR"/pi-worker-verify-runtime "$SCRIPT_DIR"/pi-worker-fail-inject "$SCRIPT_DIR"/pi-worker-runtime-checklist "$SCRIPT_DIR"/pi-worker-verify.sh "$SCRIPT_DIR"/pi-worker-supervisor-smoke-test
+chmod +x "$SCRIPT_DIR"/pi-worker-supervisor "$SCRIPT_DIR"/pi-worker-start "$SCRIPT_DIR"/pi-worker-status "$SCRIPT_DIR"/pi-worker-restart "$SCRIPT_DIR"/pi-worker-stop "$SCRIPT_DIR"/pi-worker-checkpoint "$SCRIPT_DIR"/pi-worker-tail-logs "$SCRIPT_DIR"/pi-worker-verify-runtime "$SCRIPT_DIR"/pi-worker-fail-inject "$SCRIPT_DIR"/pi-worker-runtime-checklist "$SCRIPT_DIR"/pi-worker-delegate "$SCRIPT_DIR"/pi-worker-submit-job "$SCRIPT_DIR"/pi-worker-run-job "$SCRIPT_DIR"/pi-worker-gateway "$SCRIPT_DIR"/pi-worker-telegram-bot "$SCRIPT_DIR"/pi-worker-verify.sh "$SCRIPT_DIR"/pi-worker-supervisor-smoke-test "$SCRIPT_DIR"/pi-worker-gateway-smoke-test "$SCRIPT_DIR"/pi-worker-gateway.ts "$SCRIPT_DIR"/pi-worker-telegram-bot.ts "$SCRIPT_DIR"/pi-worker-submit-job.ts "$SCRIPT_DIR"/pi-worker-run-job.ts
 
 if [[ ! -f "$HOME/.pi-worker/bootstrap-version" ]]; then
   printf '2026-04-15.1\n' > "$HOME/.pi-worker/bootstrap-version"

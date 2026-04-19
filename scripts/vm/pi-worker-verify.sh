@@ -13,6 +13,7 @@ check jq
 check node
 check npm
 check pi
+check bun
 check pi-worker-supervisor
 check pi-worker-status
 check pi-worker-checkpoint
@@ -20,6 +21,12 @@ check pi-worker-tail-logs
 check pi-worker-verify-runtime
 check pi-worker-fail-inject
 check pi-worker-runtime-checklist
+check pi-worker-delegate
+check pi-worker-submit-job
+check pi-worker-run-job
+check pi-worker-gateway
+check pi-worker-telegram-bot
+check pi-worker-gateway-smoke-test
 check pi-worker-supervisor-smoke-test
 
 [[ -d "$HOME/workspaces" ]] || fail "~/workspaces missing"

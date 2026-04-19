@@ -1,86 +1,9 @@
 [
   {
-    "id": "task-1",
-    "title": "Patch worker design doc with runtime layer model",
-    "status": "done",
-    "notes": "Verified docs/plans/2026-04-14-personal-autonomous-pi-worker-design.md already contains operator/supervisor/Pi/workspace layers, SSH/tmux -> supervisor -> Pi runtime -> workspace execution diagram, and Open Agents + ClawRun rationale. Skipped commit because repo already dirty."
-  },
-  {
-    "id": "task-2",
-    "title": "Patch worker implementation plan with supervisor and health phases",
-    "status": "done",
-    "notes": "Verified docs/plans/2026-04-14-personal-autonomous-pi-worker-implementation-plan.md already includes runtime supervision phase, state layout, health/heartbeat, and verification items. Later patched one naming drift so supervisor commands are primary and pi-worker-status is only an alias. Skipped commit because repo already dirty."
-  },
-  {
-    "id": "task-3",
-    "title": "Create worker runtime ADR for supervised Pi model",
-    "status": "done",
-    "notes": "Verified docs/plans/2026-04-14-supervised-pi-runtime-adr.md exists and matches plan decision, consequences, and non-goals. Skipped commit because repo already dirty."
-  },
-  {
-    "id": "task-4",
-    "title": "Create runtime state layout spec",
-    "status": "done",
-    "notes": "Verified docs/plans/2026-04-14-pi-worker-runtime-state-layout.md covers file layout, file purposes, update rules, and recovery usage per plan. Skipped commit because repo already dirty."
-  },
-  {
-    "id": "task-5",
-    "title": "Create lightweight supervisor script spec",
-    "status": "done",
-    "notes": "Verified docs/plans/2026-04-14-pi-worker-supervisor-spec.md covers responsibilities, command surface, readiness model, failure model, and acceptance criteria per plan. Skipped commit because repo already dirty."
-  },
-  {
-    "id": "task-6",
-    "title": "Create worker health contract spec",
-    "status": "done",
-    "notes": "Verified docs/plans/2026-04-14-pi-worker-health-contract.md covers required fields, JSON/CLI forms, stale and unhealthy rules, and future extension points per plan. Skipped commit because repo already dirty."
-  },
-  {
-    "id": "task-7",
-    "title": "Create workspace execution interface spec",
-    "status": "done",
-    "notes": "Verified docs/plans/2026-04-14-pi-worker-workspace-execution-interface.md covers minimal operations, local VM mapping, future backends, and simplicity constraint per plan. Skipped commit because repo already dirty."
-  },
-  {
-    "id": "task-8",
-    "title": "Create gateway and wake-hook placeholder spec",
-    "status": "done",
-    "notes": "Verified docs/plans/2026-04-14-pi-worker-gateway-and-wake-hooks.md covers non-goal, reserved architecture slot, POST /run + GET /health placeholder, and SSH-first optionality per plan. Skipped commit because repo already dirty."
-  },
-  {
-    "id": "task-9",
-    "title": "Write verification checklist for supervised runtime milestone",
-    "status": "done",
-    "notes": "Verified docs/plans/2026-04-14-pi-worker-supervised-runtime-verification.md covers operator checks, failure injection, checkpoint/recovery checks, and success criteria per plan. Skipped commit because repo already dirty."
-  },
-  {
-    "id": "task-10",
-    "title": "Review all worker docs for alignment",
-    "status": "done",
-    "notes": "Reviewed worker design, implementation, reference, and spec docs together. Found and fixed one naming drift: implementation plan now uses pi-worker-supervisor commands as primary and treats pi-worker-status as alias. Confirmed phase 1 remains local-VM-first, SSH/tmux-first, and gateway work stays optional/future."
-  },
-  {
-    "id": "task-11",
-    "title": "Implement shell-first pi worker supervisor and state files",
-    "status": "done",
-    "notes": "Added scripts/vm/pi-worker-supervisor with start/status/restart/stop/checkpoint/verify/tail-logs plus background monitor loop, tmux-backed worker launch, and ~/.pi-worker state/heartbeat/health/session/checkpoint files. Added wrapper commands, bootstrap symlinks, verify checks, smoke-test script, fail-inject helper, runtime-checklist script, and README updates. Verified with bash -n plus temp-HOME smoke tests for start/status/kill-recovery/stale/broken-workspace/restart/stop/checkpoint/verify/tail-logs using fake pi binary. Also patched cross-platform timestamp parsing via python3 fallback."
-  },
-  {
-    "id": "task-12",
-    "title": "Run supervised runtime checklist on real VM session",
-    "status": "done",
-    "notes": "Installed OrbStack, created Ubuntu 24.04 machine `theo-pi`, bootstrapped packages, installed pi and pi-web-access, started supervised runtime, and ran `pi-worker-runtime-checklist theo-pi` successfully on the real VM."
-  },
-  {
-    "id": "task-13",
-    "title": "Tune restart/readiness semantics from real Pi behavior",
-    "status": "done",
-    "notes": "Real VM exposed that supervisor polling was tied to 30s heartbeat interval, delaying crash recovery. Patched supervisor to poll on separate `MONITOR_INTERVAL_SECONDS` cadence while keeping heartbeat writes throttled, then re-ran real VM checklist successfully."
-  },
-  {
-    "id": "task-14",
-    "title": "Curate dirty repo state and produce commit plan",
-    "status": "done",
-    "notes": "Created `.agent/commit-plan.md` with commit grouping, suggested messages, unrelated-file review notes, and tomorrow sequence for real-VM verification + commit staging."
+    "id": "task-19",
+    "title": "Execute pi worker runtime refactor plan task-by-task",
+    "status": "in_progress",
+    "notes": "Completed Tasks 1-6 of docs/plans/2026-04-16-pi-worker-runtime-refactor-plan.md plus follow-up hardening for Telegram final-answer relay. Verified npm run check, npm run test:vm, bun test scripts/vm/lib/*.test.ts scripts/vm/lib/backends/*.test.ts, real VM direct runner checks for prompt edge cases, and live gateway/bot restart behavior. Remaining planned major work still starts at Task 7 supervisor Bun core. Before continuing, current branch is being reviewed and packaged for merge to main as stable intermediate milestone.",
+    "updatedAt": "2026-04-19T13:55:35.798Z"
   }
 ]

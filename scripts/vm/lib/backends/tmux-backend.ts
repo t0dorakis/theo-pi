@@ -13,19 +13,7 @@ export function markerPair(jobId: string) {
 
 export function formatDelegatedPrompt(job: WorkerJob) {
   const { startMarker, endMarker } = markerPair(job.id)
-  return [
-    "Return your final answer only inside these exact XML tags.",
-    `Start tag: ${startMarker}`,
-    `End tag: ${endMarker}`,
-    "Rules:",
-    `- Output exactly one ${startMarker} block and one ${endMarker}.`,
-    "- Put only final answer text between tags.",
-    "- No text before start tag.",
-    "- No text after end tag.",
-    "- No markdown fences.",
-    "- If you cannot complete request, still return brief explanation inside tags.",
-    `User request: ${job.prompt}`,
-  ].join("\n")
+  return `Respond with exactly one XML element and nothing else: ${startMarker}YOUR RESPONSE HERE${endMarker} User request: ${job.prompt}`
 }
 
 export function extractAnswerFromPane(pane: string, jobId: string) {

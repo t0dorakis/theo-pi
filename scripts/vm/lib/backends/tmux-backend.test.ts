@@ -17,9 +17,12 @@ test("tmux backend formats delegated prompt request", () => {
   }
 
   const prompt = formatDelegatedPrompt(job)
-  expect(prompt).toContain("Return your final answer only inside these exact XML tags")
+  expect(prompt).toContain("Respond with exactly one XML element and nothing else")
   expect(prompt).toContain("Reply with exactly: pong")
   expect(prompt).toContain("<final_answer")
+  expect(prompt.includes("\n")).toBe(false)
+  expect(prompt.match(/<final_answer/g)?.length).toBe(1)
+  expect(prompt.match(/<\/final_answer>/g)?.length).toBe(1)
 })
 
 test("tmux backend extracts answer from final_answer xml block", () => {

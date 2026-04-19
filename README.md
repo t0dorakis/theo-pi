@@ -109,8 +109,13 @@ For Theo's local Linux VM worker setup, repo includes:
 - `scripts/vm/pi-worker-verify-runtime` — compatibility wrapper for `pi-worker-supervisor verify`
 - `scripts/vm/pi-worker-fail-inject` — helper for runtime failure injection (`kill`, `stale`, `break-workspace`, `restore-workspace`)
 - `scripts/vm/pi-worker-runtime-checklist` — run supervised-runtime verification checks against a real session
+- `scripts/vm/pi-worker-delegate` — send a prompt into a live tmux-backed Pi session
+- `scripts/vm/pi-worker-gateway` / `pi-worker-gateway.ts` — Bun HTTP gateway with `/health`, `/status`, `/run`, `/restart`, `/checkpoint`, `/logs`, and Telegram webhook support
+- `scripts/vm/pi-worker-telegram-bot` / `pi-worker-telegram-bot.ts` — Bun long-poll Telegram bot; plain text runs prompts, shows typing status, and returns final Pi answer; control commands stay available
+- `scripts/vm/pi-worker-submit-job` / `pi-worker-run-job` — file-backed Telegram job queue + answer relay helpers under `~/.pi-worker/telegram/jobs`
 - `scripts/vm/pi-worker-verify.sh` — verify guest worker prerequisites/config
 - `scripts/vm/pi-worker-supervisor-smoke-test` — temp-HOME smoke test for supervisor start/status/kill/restart/stop behavior
+- `scripts/vm/pi-worker-gateway-smoke-test` — temp-HOME smoke test for Bun gateway endpoints
 - `templates/pi-worker/` — starter `settings.json`, `.env`, and SSH hardening snippets
 - `docs/plans/2026-04-14-personal-autonomous-pi-worker-bootstrap-checklist.md` — step-by-step bootstrap checklist
 
