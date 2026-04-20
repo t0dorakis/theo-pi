@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises"
 
 export type SmolVmConfig = {
   cliPath?: string
+  sshKeyPath?: string
   vmName: string
   backend: string
   memoryMib: number
@@ -26,17 +27,24 @@ function shellEscape(value: string) {
   return `'${value.replace(/'/g, `'"'"'`)}'`
 }
 
+function guestPath(value: string) {
+  if (value === "~") return "/root"
+  if (value.startsWith("~/")) return `/root/${value.slice(2)}`
+  return value
+}
+
 export function parseListPayload(payload: string, vmName: string): VmRow | null {
   const parsed = JSON.parse(payload) as { data?: { vms?: Array<{ name?: string; status?: string; ssh_port?: number | null }> } }
   const row = parsed.data?.vms?.find((entry) => entry.name === vmName)
   return row ? { name: row.name ?? vmName, status: row.status ?? "unknown", sshPort: row.ssh_port ?? null } : null
 }
 
-export function buildGuestPiCommand(input: { workdir: string; promptPath: string; provider?: string; model?: string }) {
+export function buildGuestPiCommand(input: { workdir: string; promptPath: string; piDir?: string; provider?: string; model?: string }) {
   const flags = [input.provider ? `--provider ${input.provider}` : "", input.model ? `--model ${input.model}` : ""]
     .filter(Boolean)
     .join(" ")
-  return `export PATH=/usr/local/bin:$PATH; cd ${input.workdir}; pi ${flags} -p \"$(cat ${input.promptPath})\" </dev/null`
+  const piDir = input.piDir ? `export PI_CODING_AGENT_DIR=${guestPath(input.piDir)}; ` : ""
+  return `export PATH=/usr/local/bin:$PATH; ${piDir}cd ${guestPath(input.workdir)}; pi ${flags} -p \"$(cat ${guestPath(input.promptPath)})\" </dev/null`
 }
 
 async function maybeRead(path: string) {
@@ -90,27 +98,29 @@ export function createSmolVmManager(config: SmolVmConfig & { hostRun: HostRun })
 
   async function ssh(command: string) {
     const port = await getSshPort()
-    return config.hostRun("ssh", [
+    const args = [
       "-o",
       "StrictHostKeyChecking=no",
       "-o",
       "UserKnownHostsFile=/dev/null",
-      "-p",
-      String(port),
-      "root@127.0.0.1",
-      "bash",
-      "-lc",
-      command,
-    ])
+      "-o",
+      "IdentitiesOnly=yes",
+    ]
+    if (config.sshKeyPath) {
+      args.push("-i", config.sshKeyPath)
+    }
+    args.push("-p", String(port), "root@127.0.0.1", `bash -lc ${shellEscape(command)}`)
+    return config.hostRun("ssh", args)
   }
 
   async function stageGuestFile(path: string, content: string) {
-    const script = `mkdir -p $(dirname ${shellEscape(path)}) && cat > ${shellEscape(path)} <<'__PI_EOF__'\n${content}\n__PI_EOF__`
+    const resolvedPath = guestPath(path)
+    const script = `mkdir -p $(dirname ${shellEscape(resolvedPath)}) && cat > ${shellEscape(resolvedPath)} <<'__PI_EOF__'\n${content}\n__PI_EOF__`
     await ssh(script)
   }
 
   async function bootstrapGuest() {
-    await ssh(`mkdir -p ${config.guestWorkdir} ${config.guestPiDir}`)
+    await ssh(`mkdir -p ${guestPath(config.guestWorkdir)} ${guestPath(config.guestPiDir)}`)
     const auth = await maybeRead(config.hostPiAuthPath)
     if (!auth) {
       throw new Error(`Missing host Pi auth file: ${config.hostPiAuthPath}`)
@@ -138,8 +148,8 @@ export function createSmolVmManager(config: SmolVmConfig & { hostRun: HostRun })
         "command -v node >/dev/null",
         "command -v npm >/dev/null",
         "command -v pi >/dev/null",
-        `[ -f ${shellEscape(`${config.guestPiDir}/auth.json`)} ]`,
-        `[ -f ${shellEscape(`${config.guestPiDir}/settings.json`)} ]`,
+        `[ -f ${guestPath(`${config.guestPiDir}/auth.json`)} ]`,
+        `[ -f ${guestPath(`${config.guestPiDir}/settings.json`)} ]`,
       ].join("; "),
     )
   }

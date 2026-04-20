@@ -110,6 +110,7 @@ async function runLocal(command: string, args: string[] = []) {
 }
 
 function assertAllowed(chatId: number) {
+  if (allowedChatIds.has("*")) return
   if (!allowedChatIds.has(String(chatId))) {
     throw new Error(`chat ${chatId} not allowed`)
   }

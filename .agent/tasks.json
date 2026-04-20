@@ -37,8 +37,8 @@
   {
     "id": "task-24",
     "title": "Implement SmolVM-backed Telegram bot spike backend",
-    "status": "in_progress",
-    "notes": "Implemented selectable backend registry, SmolVM helper/backend, isolated SmolVM Telegram wrapper, docs, and tests. Verified local unit tests, syntax checks, and `external/SmolVM/.venv/bin/smolvm doctor --backend qemu`. Remaining step is live Telegram round-trip with new bot token/chat allowlist.",
-    "updatedAt": "2026-04-20T12:09:00.285Z"
+    "status": "done",
+    "notes": "Completed SmolVM-backed Telegram spike proof. Fixed SSH key selection, remote command quoting, guest path normalization, Pi config dir handling, and SSH stderr noise stripping. Verified real Telegram -> SmolVM -> Pi round-trip and added gateway `/run` path for non-tmux backends plus real-instance smoke test `scripts/vm/pi-worker-gateway-smolvm-smoke-test`.",
+    "updatedAt": "2026-04-20T14:26:54.097Z"
   }
 ]

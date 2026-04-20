@@ -19,6 +19,7 @@ export type RuntimeEnv = {
   jobCaptureLines: number
   smolvmCliPath: string
   smolvmVmName: string
+  smolvmSshKeyPath: string
   smolvmBackend: string
   smolvmMemoryMib: number
   smolvmDiskSizeMib: number
@@ -70,11 +71,12 @@ export function getRuntimeEnv(): RuntimeEnv {
     jobCaptureLines: intFromEnv("PI_WORKER_JOB_CAPTURE_LINES", 500),
     smolvmCliPath: process.env.SMOLVM_BIN ?? "smolvm",
     smolvmVmName: process.env.SMOLVM_VM_NAME ?? `${session}-smolvm`,
+    smolvmSshKeyPath: process.env.SMOLVM_SSH_KEY_PATH ?? `${homeDir}/.smolvm/keys/id_ed25519`,
     smolvmBackend: process.env.SMOLVM_BACKEND ?? "qemu",
     smolvmMemoryMib: intFromEnv("SMOLVM_MEMORY_MIB", 4096),
     smolvmDiskSizeMib: intFromEnv("SMOLVM_DISK_SIZE_MIB", 8192),
     smolvmGuestWorkdir: process.env.SMOLVM_GUEST_WORKDIR ?? "~/smolvm-theo-pi",
-    smolvmGuestPiDir: process.env.SMOLVM_GUEST_PI_DIR ?? "~/.config/pi",
+    smolvmGuestPiDir: process.env.SMOLVM_GUEST_PI_DIR ?? "~/.pi/agent",
     smolvmHostPiAuthPath: process.env.SMOLVM_HOST_PI_AUTH_PATH ?? `${homeDir}/.config/pi/auth.json`,
     smolvmHostPiSettingsPath: process.env.SMOLVM_HOST_PI_SETTINGS_PATH ?? "",
     smolvmGuestProvider: process.env.SMOLVM_GUEST_PI_PROVIDER ?? "openai-codex",

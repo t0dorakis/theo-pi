@@ -24,13 +24,15 @@ test("buildGuestPiCommand closes stdin", () => {
   const command = buildGuestPiCommand({
     workdir: "~/work/job-1",
     promptPath: "~/work/job-1/prompt.txt",
+    piDir: "~/.pi/agent",
     provider: "openai-codex",
     model: "gpt-5.4",
   })
 
   expect(command).toContain("</dev/null")
-  expect(command).toContain("cd ~/work/job-1")
-  expect(command).toContain("pi --provider openai-codex --model gpt-5.4 -p \"$(cat ~/work/job-1/prompt.txt)\"")
+  expect(command).toContain("export PI_CODING_AGENT_DIR=/root/.pi/agent")
+  expect(command).toContain("cd /root/work/job-1")
+  expect(command).toContain("pi --provider openai-codex --model gpt-5.4 -p \"$(cat /root/work/job-1/prompt.txt)\"")
 })
 
 test("ensureVm creates missing vm and can delete unhealthy vm", async () => {
@@ -41,7 +43,7 @@ test("ensureVm creates missing vm and can delete unhealthy vm", async () => {
     memoryMib: 4096,
     diskSizeMib: 8192,
     guestWorkdir: "~/smolvm-theo-pi",
-    guestPiDir: "~/.config/pi",
+    guestPiDir: "~/.pi/agent",
     hostPiAuthPath: "/tmp/auth.json",
     hostRun: async (command, args = []) => {
       calls.push([command, ...args].join(" "))
@@ -68,7 +70,7 @@ test("guest command uses ssh against localhost ssh port", async () => {
     memoryMib: 4096,
     diskSizeMib: 8192,
     guestWorkdir: "~/smolvm-theo-pi",
-    guestPiDir: "~/.config/pi",
+    guestPiDir: "~/.pi/agent",
     hostPiAuthPath: "/tmp/auth.json",
     hostRun: async (command, args = []) => {
       calls.push([command, ...args].join(" "))
@@ -80,9 +82,10 @@ test("guest command uses ssh against localhost ssh port", async () => {
       }
       return "ok"
     },
+    sshKeyPath: "/tmp/smolvm-key",
   })
 
   await manager.runGuest("echo hi")
 
-  expect(calls.at(-1)).toContain("ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2200 root@127.0.0.1 bash -lc echo")
+  expect(calls.at(-1)).toContain("ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -i /tmp/smolvm-key -p 2200 root@127.0.0.1 bash -lc 'echo hi'")
 })

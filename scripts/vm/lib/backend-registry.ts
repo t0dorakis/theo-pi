@@ -25,6 +25,7 @@ export function createBackend(options: {
         smolvm: {
           cliPath: options.env.smolvmCliPath,
           vmName: options.env.smolvmVmName,
+          sshKeyPath: options.env.smolvmSshKeyPath,
           backend: options.env.smolvmBackend,
           memoryMib: options.env.smolvmMemoryMib,
           diskSizeMib: options.env.smolvmDiskSizeMib,

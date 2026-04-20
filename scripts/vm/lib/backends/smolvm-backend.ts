@@ -4,6 +4,14 @@ import { nowIso } from "../time"
 import { buildGuestPiCommand, createSmolVmManager, type SmolVmConfig } from "../smolvm"
 import type { WorkerJob } from "../types"
 
+function sanitizeGuestAnswer(output: string) {
+  return output
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith("Warning: Permanently added '[127.0.0.1]:"))
+    .join("\n")
+    .trim()
+}
+
 export function createSmolVmBackend(options: {
   session: string
   stateDir: string
@@ -29,6 +37,7 @@ export function createSmolVmBackend(options: {
           buildGuestPiCommand({
             workdir: jobDir,
             promptPath,
+            piDir: options.smolvm.guestPiDir,
             provider: options.smolvm.guestProvider,
             model: options.smolvm.guestModel,
           }),
@@ -37,7 +46,7 @@ export function createSmolVmBackend(options: {
           id: job.id,
           backendId: "smolvm",
           status: "done",
-          answer,
+          answer: sanitizeGuestAnswer(answer),
           completedAt: nowIso(),
         })
       } catch (error) {

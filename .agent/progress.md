@@ -48,8 +48,8 @@
 - `node --check scripts/vm/pi-worker-run-job.ts scripts/vm/pi-worker-gateway.ts scripts/vm/pi-worker-telegram-bot.ts scripts/vm/lib/env.ts scripts/vm/lib/backend-registry.ts scripts/vm/lib/smolvm.ts scripts/vm/lib/backends/smolvm-backend.ts`
 
 ## Next best step
-- Run one real Telegram round-trip with new bot token using `scripts/vm/pi-worker-telegram-bot-smolvm`, `SMOLVM_BIN=external/SmolVM/.venv/bin/smolvm`, and guest auth path configured; if live run fails, harden bootstrap/timeout behavior from logs.
+- Decide whether to keep gateway `/run` synchronous SmolVM behavior and clean up leftover pending bot jobs, or move on to supervisor/runtime integration now that Telegram relay and gateway smoke path both work against real SmolVM.
 
 ## Blockers
-- Need new Telegram bot token/chat allowlist values to complete live end-to-end verification.
+- None for SmolVM Telegram/gateway feasibility; end-to-end proof now exists.
 - Larger refactor plan still has unfinished Tasks 7-12 after merge point.
