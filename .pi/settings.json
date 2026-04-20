@@ -1,5 +1,9 @@
 {
   "packages": [
+    "./packages/pi-auto-skills",
+    "./packages/pi-caveman",
+    "./packages/pi-task-loop",
+    "npm:pi-web-access",
     "npm:pi-fff"
   ]
 }

@@ -18,20 +18,9 @@ echo "==> Installing workspace dependencies"
 cd "$REPO_DIR"
 npm install
 
-echo "==> Writing ~/.pi/agent/settings.json"
+echo "==> Symlinking ~/.pi/agent/settings.json -> repo .pi/settings.json"
 mkdir -p "$HOME/.pi/agent"
-cat > "$HOME/.pi/agent/settings.json" <<EOF
-{
-  "packages": [
-    "../../workspaces/theo-pi/packages/pi-auto-skills",
-    "../../workspaces/theo-pi/packages/pi-caveman",
-    "npm:pi-web-access"
-  ]
-}
-EOF
-
-echo "==> Installing pi-web-access package reference if needed"
-pi install npm:pi-web-access || true
+ln -sf "$REPO_DIR/.pi/settings.json" "$HOME/.pi/agent/settings.json"
 
 echo "==> Installing caveman prompt starter"
 cp "$REPO_DIR/packages/pi-caveman/APPEND_SYSTEM.md" "$HOME/.pi/agent/APPEND_SYSTEM.md"
