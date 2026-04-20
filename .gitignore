@@ -11,7 +11,8 @@ packages/*/node_modules/
 .env.pi
 
 # Local agent state
-.pi/
+.pi/*
+!.pi/settings.json
 .agents/
 auth.json
 
