@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile)
 const env = getRuntimeEnv()
 const scriptDir = getScriptDir(import.meta.url)
 const stateStore = createStateStore(env.stateDir)
-const queue = createJobQueue(env.stateDir)
+const queue = createJobQueue(env.stateDir, { backend: env.backend })
 
 const token = env.telegramBotToken
 const allowedChatIds = env.telegramAllowedChatIds

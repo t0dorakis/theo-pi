@@ -2,7 +2,7 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 
-import { createTmuxBackend } from "./lib/backends/tmux-backend"
+import { createBackend } from "./lib/backend-registry"
 import { getRuntimeEnv } from "./lib/env"
 import { getScriptDir, localScript } from "./lib/paths"
 import { createStateStore } from "./lib/state-store"
@@ -20,10 +20,10 @@ const telegramWebhookSecret = env.telegramWebhookSecret
 const telegramToken = env.telegramBotToken
 const telegramAllowedChats = env.telegramAllowedChatIds
 const logsLines = env.telegramLogLines
-const backend = createTmuxBackend({
-  session,
-  delegateScript: localScript(scriptDir, "pi-worker-delegate"),
+const backend = createBackend({
+  env,
   runLocal,
+  delegateScript: localScript(scriptDir, "pi-worker-delegate"),
 })
 
 type JsonRecord = Record<string, unknown>

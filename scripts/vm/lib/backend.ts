@@ -1,5 +1,7 @@
 import type { WorkerJob } from "./types"
 
+export type WorkerBackendId = "tmux" | "smolvm"
+
 export interface WorkerBackend {
   submitPrompt(job: WorkerJob): Promise<void>
   readResult(job: WorkerJob): Promise<string | null>

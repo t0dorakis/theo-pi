@@ -137,6 +137,7 @@ For Theo's local Linux VM worker setup, repo includes:
 - `scripts/vm/pi-worker-delegate` — send a prompt into a live tmux-backed Pi session
 - `scripts/vm/pi-worker-gateway` / `pi-worker-gateway.ts` — Bun HTTP gateway with mandatory bearer auth for control endpoints, plus Telegram webhook support guarded by secret header validation
 - `scripts/vm/pi-worker-telegram-bot` / `pi-worker-telegram-bot.ts` — Bun long-poll Telegram bot; plain text runs prompts, shows typing status, and returns final Pi answer; control commands stay available
+- `scripts/vm/pi-worker-telegram-bot-smolvm` — isolated Telegram bot wrapper that switches backend to SmolVM and defaults state to `~/.pi-worker-smolvm`
 - `scripts/vm/pi-worker-submit-job` / `pi-worker-run-job` — file-backed Telegram job queue + answer relay helpers under `~/.pi-worker/telegram/jobs`
 - `scripts/vm/pi-worker-verify.sh` — verify guest worker prerequisites/config
 - `scripts/vm/pi-worker-supervisor-smoke-test` — temp-HOME smoke test for supervisor start/status/kill/restart/stop behavior
@@ -148,6 +149,8 @@ Security notes:
 - set `PI_WORKER_GATEWAY_TOKEN`; gateway refuses to start without it
 - set `TELEGRAM_WEBHOOK_SECRET` before exposing `/telegram/webhook`; requests must include `x-telegram-bot-api-secret-token`
 - `TELEGRAM_ALLOWED_CHAT_IDS` limits bot actions by chat id, but does not replace webhook authentication
+- SmolVM spike path needs `PI_WORKER_BACKEND=smolvm`; if `smolvm` is not on `PATH`, set `SMOLVM_BIN` to the CLI path (for example `external/SmolVM/.venv/bin/smolvm`)
+- Non-interactive Pi inside SmolVM must close stdin (`</dev/null>`); current SmolVM backend does this automatically
 - `docs/plans/2026-04-14-personal-autonomous-pi-worker-bootstrap-checklist.md` — step-by-step bootstrap checklist
 
 ## Development

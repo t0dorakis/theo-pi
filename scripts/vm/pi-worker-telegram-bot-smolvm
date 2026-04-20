@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PI_WORKER_BACKEND="${PI_WORKER_BACKEND:-smolvm}"
+export PI_WORKER_STATE_DIR="${PI_WORKER_STATE_DIR:-$HOME/.pi-worker-smolvm}"
+exec bun "$SCRIPT_DIR/pi-worker-telegram-bot.ts" "$@"

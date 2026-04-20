@@ -30,17 +30,26 @@
     - Pi successfully read and edited local files and a tiny git repo inside guest
   - confirmed workspace mount still fails due missing guest 9p/overlay support
   - confirmed QEMU cleanup was more reliable via CLI delete than context-manager stop
+- Implemented SmolVM Telegram spike plumbing:
+  - added selectable worker backend via `PI_WORKER_BACKEND`
+  - added `scripts/vm/lib/smolvm.ts` helper for VM discovery/create, SSH execution, guest bootstrap, and delete
+  - added `scripts/vm/lib/backends/smolvm-backend.ts` that runs guest-local Pi and writes result-channel files
+  - updated runtime entrypoints to use backend registry instead of hardcoded tmux
+  - added isolated wrapper `scripts/vm/pi-worker-telegram-bot-smolvm`
+  - documented `SMOLVM_BIN` path override because local SmolVM CLI currently lives in `external/SmolVM/.venv/bin/smolvm`
 
 ## Verification
-- `smolvm doctor --backend qemu`
+- `external/SmolVM/.venv/bin/smolvm doctor --backend qemu`
 - `python examples/quickstart_sandbox.py`
 - live guest checks for OS/packages/disk/node/npm/pi CLI inside sandbox
 - `pi -p ... </dev/null` inside guest to confirm hang cause vs actual Pi error
 - manual cleanup via `smolvm delete <vm>` after failed stop paths
+- `bun test scripts/vm/lib/smolvm.test.ts scripts/vm/lib/backends/smolvm-backend.test.ts scripts/vm/lib/backends/tmux-backend.test.ts`
+- `node --check scripts/vm/pi-worker-run-job.ts scripts/vm/pi-worker-gateway.ts scripts/vm/pi-worker-telegram-bot.ts scripts/vm/lib/env.ts scripts/vm/lib/backend-registry.ts scripts/vm/lib/smolvm.ts scripts/vm/lib/backends/smolvm-backend.ts`
 
 ## Next best step
-- Execute `docs/plans/2026-04-20-smolvm-telegram-spike-implementation-plan.md`: add selectable `smolvm` backend, isolated Telegram spike entrypoint, fake-backed smoke tests, then run one live Telegram round-trip against a real SmolVM guest.
+- Run one real Telegram round-trip with new bot token using `scripts/vm/pi-worker-telegram-bot-smolvm`, `SMOLVM_BIN=external/SmolVM/.venv/bin/smolvm`, and guest auth path configured; if live run fails, harden bootstrap/timeout behavior from logs.
 
 ## Blockers
-- None.
+- Need new Telegram bot token/chat allowlist values to complete live end-to-end verification.
 - Larger refactor plan still has unfinished Tasks 7-12 after merge point.
