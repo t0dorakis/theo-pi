@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GATEWAY="$SCRIPT_DIR/pi-worker-gateway.ts"
+
+pass() { printf '[pass] %s\n' "$1"; }
+fail() { printf '[fail] %s\n' "$1"; exit 1; }
+
+: "${SMOLVM_BIN:?set SMOLVM_BIN}"
+: "${SMOLVM_HOST_PI_AUTH_PATH:?set SMOLVM_HOST_PI_AUTH_PATH}"
+
+TMPDIR_ROOT="$(mktemp -d)"
+GATEWAY_PID=""
+cleanup() {
+  if [[ -n "$GATEWAY_PID" ]]; then kill "$GATEWAY_PID" >/dev/null 2>&1 || true; fi
+  rm -rf "$TMPDIR_ROOT"
+}
+trap cleanup EXIT
+
+export PI_WORKER_BACKEND="smolvm"
+export PI_WORKER_SESSION="${PI_WORKER_SESSION:-theo-pi}"
+export PI_WORKER_STATE_DIR="${PI_WORKER_STATE_DIR:-$HOME/.pi-worker-smolvm}"
+export PI_WORKER_GATEWAY_HOST="127.0.0.1"
+export PI_WORKER_GATEWAY_PORT="${PI_WORKER_GATEWAY_PORT:-18788}"
+export PI_WORKER_GATEWAY_TOKEN="${PI_WORKER_GATEWAY_TOKEN:-test-token}"
+export TELEGRAM_WEBHOOK_SECRET="${TELEGRAM_WEBHOOK_SECRET:-telegram-secret}"
+export TELEGRAM_ALLOWED_CHAT_IDS="${TELEGRAM_ALLOWED_CHAT_IDS:-*}"
+export SMOLVM_VM_NAME="${SMOLVM_VM_NAME:-${PI_WORKER_SESSION}-smolvm}"
+export SMOLVM_SSH_KEY_PATH="${SMOLVM_SSH_KEY_PATH:-$HOME/.smolvm/keys/id_ed25519}"
+export SMOLVM_GUEST_PI_DIR="${SMOLVM_GUEST_PI_DIR:-~/.pi/agent}"
+export PI_WORKER_JOB_TIMEOUT_SECONDS="${PI_WORKER_JOB_TIMEOUT_SECONDS:-180}"
+
+nohup bun "$GATEWAY" >"$TMPDIR_ROOT/gateway.log" 2>&1 &
+GATEWAY_PID=$!
+
+READY=0
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  sleep 1
+  if curl -sS "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/health" >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+done
+[[ "$READY" -eq 1 ]] || { cat "$TMPDIR_ROOT/gateway.log"; fail 'gateway started'; }
+pass 'gateway started'
+
+HEALTH="$(curl -sS "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/health")"
+echo "$HEALTH" | jq -e '.ok == true' >/dev/null || { echo "$HEALTH"; fail 'health endpoint'; }
+pass 'health endpoint'
+
+RUN_RESPONSE="$(curl -sS -H "Authorization: Bearer ${PI_WORKER_GATEWAY_TOKEN}" -H 'content-type: application/json' -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/run" -d '{"prompt":"What files do you have available? Do an ls for me"}')"
+echo "$RUN_RESPONSE" | jq -e '.ok == true and (.answer | contains("prompt.txt"))' >/dev/null || { echo "$RUN_RESPONSE"; fail 'run endpoint returned guest answer'; }
+pass 'run endpoint returned guest answer'
+
+if echo "$RUN_RESPONSE" | jq -r '.answer' | grep -q "Warning: Permanently added"; then
+  echo "$RUN_RESPONSE"
+  fail 'ssh noise stripped'
+fi
+pass 'ssh noise stripped'
+
+pass 'smolvm gateway smoke checks passed'

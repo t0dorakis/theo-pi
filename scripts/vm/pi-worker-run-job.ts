@@ -2,7 +2,7 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 
-import { createTmuxBackend } from "./lib/backends/tmux-backend"
+import { createBackend } from "./lib/backend-registry"
 import { getRuntimeEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
 import { getScriptDir, localScript } from "./lib/paths"
@@ -10,7 +10,7 @@ import { createResultChannel } from "./lib/result-channel"
 
 const execFileAsync = promisify(execFile)
 const env = getRuntimeEnv()
-const queue = createJobQueue(env.stateDir)
+const queue = createJobQueue(env.stateDir, { backend: env.backend })
 const scriptDir = getScriptDir(import.meta.url)
 const session = env.session
 const timeoutSeconds = env.jobTimeoutSeconds
@@ -30,12 +30,10 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-const backend = createTmuxBackend({
-  session,
-  captureLines,
-  delegateScript: localScript(scriptDir, "pi-worker-delegate"),
-  stateDir: env.stateDir,
+const backend = createBackend({
+  env,
   runLocal,
+  delegateScript: localScript(scriptDir, "pi-worker-delegate"),
 })
 
 const jobId = process.argv[2]
@@ -70,11 +68,18 @@ await backend.submitPrompt(job)
 const deadline = Date.now() + timeoutSeconds * 1000
 while (Date.now() < deadline) {
   await queue.heartbeatLease(job.id)
-  const answer = await backend.readResult(job)
-  if (answer) {
-    await queue.completeJob(job.id, answer)
-    console.log(JSON.stringify({ ok: true, id: job.id, resultPath: resultChannel.resultPath(job.id) }))
-    process.exit(0)
+  try {
+    const answer = await backend.readResult(job)
+    if (answer) {
+      await queue.completeJob(job.id, answer)
+      console.log(JSON.stringify({ ok: true, id: job.id, resultPath: resultChannel.resultPath(job.id) }))
+      process.exit(0)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await queue.failJob(job.id, message)
+    console.error(message)
+    process.exit(1)
   }
   await sleep(pollIntervalMs)
 }

@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
 import { execFile } from "node:child_process"
+import { randomUUID } from "node:crypto"
 import { promisify } from "node:util"
 
-import { createTmuxBackend } from "./lib/backends/tmux-backend"
+import { createBackend } from "./lib/backend-registry"
 import { getRuntimeEnv } from "./lib/env"
 import { getScriptDir, localScript } from "./lib/paths"
 import { createStateStore } from "./lib/state-store"
+import type { WorkerJob } from "./lib/types"
 
 const execFileAsync = promisify(execFile)
 const env = getRuntimeEnv()
@@ -20,10 +22,10 @@ const telegramWebhookSecret = env.telegramWebhookSecret
 const telegramToken = env.telegramBotToken
 const telegramAllowedChats = env.telegramAllowedChatIds
 const logsLines = env.telegramLogLines
-const backend = createTmuxBackend({
-  session,
-  delegateScript: localScript(scriptDir, "pi-worker-delegate"),
+const backend = createBackend({
+  env,
   runLocal,
+  delegateScript: localScript(scriptDir, "pi-worker-delegate"),
 })
 
 type JsonRecord = Record<string, unknown>
@@ -71,13 +73,59 @@ async function runLocal(command: string, args: string[] = []) {
   return `${stdout}${stderr}`.trim()
 }
 
+function sanitizeAnswer(output: string) {
+  return output
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith("Warning: Permanently added '[127.0.0.1]:"))
+    .join("\n")
+    .trim()
+}
+
+async function runBackendPrompt(prompt: string) {
+  const now = new Date().toISOString()
+  const job: WorkerJob = {
+    id: `${now.replace(/[:.]/g, "-")}-${randomUUID()}`,
+    chatId: "gateway",
+    prompt,
+    status: "running",
+    createdAt: now,
+    startedAt: now,
+    completedAt: null,
+    answer: null,
+    error: null,
+    backend: env.backend,
+    resultFormat: "text",
+  }
+  await backend.submitPrompt(job)
+  const answer = await backend.readResult(job)
+  return sanitizeAnswer(answer ?? "")
+}
+
 async function statusJson() {
   const stored = await stateStore.readHealth()
   if (stored) {
     return stored as JsonRecord
   }
-  const output = await runLocal(localScript(scriptDir, "pi-worker-status"), [session, "--json"])
-  return JSON.parse(output) as JsonRecord
+  try {
+    const output = await runLocal(localScript(scriptDir, "pi-worker-status"), [session, "--json"])
+    return JSON.parse(output) as JsonRecord
+  } catch {
+    if (env.backend === "smolvm") {
+      return {
+        ok: true,
+        daemonStatus: "running",
+        sessionName: session,
+        workspacePath: env.smolvmGuestWorkdir,
+        pid: null,
+        restartCount: 0,
+        lastHeartbeatAt: null,
+        lastSuccessAt: null,
+        bootstrapVersion: null,
+        notes: ["smolvm backend gateway fallback status"],
+      } satisfies JsonRecord
+    }
+    throw new Error(`session not found: ${session}`)
+  }
 }
 
 async function telegramApi(method: string, body: JsonRecord) {
@@ -206,8 +254,12 @@ const server = Bun.serve({
         if (!prompt) {
           return json({ ok: false, error: "missing prompt" }, { status: 400 })
         }
-        const output = await runLocal(localScript(scriptDir, "pi-worker-delegate"), [session, prompt])
-        return json({ ok: true, session, message: output })
+        if (env.backend === "tmux") {
+          const output = await runLocal(localScript(scriptDir, "pi-worker-delegate"), [session, prompt])
+          return json({ ok: true, session, message: output })
+        }
+        const answer = await runBackendPrompt(prompt)
+        return json({ ok: true, backend: env.backend, answer })
       }
 
       if (request.method === "POST" && url.pathname === "/restart") {
