@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+pass() { printf '[pass] %s\n' "$1"; }
+fail() { printf '[fail] %s\n' "$1"; exit 1; }
+
+TMPDIR_ROOT="$(mktemp -d)"
+cleanup() {
+  rm -rf "$TMPDIR_ROOT"
+}
+trap cleanup EXIT
+
+RESULT="$(TMPDIR_ROOT="$TMPDIR_ROOT" bun -e '
+  import { createJobQueue } from "./scripts/vm/lib/jobs.ts"
+  import { createStateStore } from "./scripts/vm/lib/state-store.ts"
+  import { createTelegramRunner } from "./scripts/vm/lib/telegram-runner.ts"
+
+  const stateDir = `${process.env.TMPDIR_ROOT}/state`
+  const queue = createJobQueue(stateDir, { backend: "smolvm" })
+  const store = createStateStore(stateDir)
+  const sent = []
+
+  const job = await queue.enqueueJob({ chatId: "123", prompt: "hello" })
+  const runner = createTelegramRunner({
+    queue,
+    jobs: { runJob: async () => ({ status: "done", answer: "pong" }) },
+    telegram: {
+      sendMessage: async (_chatId, text) => void sent.push(text),
+      sendChatAction: async () => {},
+    },
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    typingIntervalMs: 10,
+  })
+
+  await runner.runOnce()
+  const stored = await store.readTelegramJob(job.id)
+  console.log(JSON.stringify({ sent, stored }))
+')"
+
+echo "$RESULT" | jq -e '.sent == ["pong"]' >/dev/null || { echo "$RESULT"; fail 'runner sent answer'; }
+pass 'runner sent answer'
+
+echo "$RESULT" | jq -e '.stored.status == "done" and (.stored.telegramDeliveredAt | type == "string")' >/dev/null || { echo "$RESULT"; fail 'runner marked delivered'; }
+pass 'runner marked delivered'
+
+pass 'telegram split smoke checks passed'
