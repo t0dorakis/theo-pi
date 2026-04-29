@@ -17,6 +17,8 @@ packages/*/node_modules/
 .agent/tasks.json
 .agent/tasks-history.json
 .agent/loop-state.json
+external/SmolVM/
+external/pi-tasks/
 auth.json
 
 # Local databases / keys

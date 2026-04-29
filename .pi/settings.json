@@ -4,6 +4,7 @@
     "./packages/pi-caveman",
     "./packages/pi-task-loop",
     "npm:pi-web-access",
-    "npm:pi-fff"
+    "npm:pi-fff",
+    "npm:@tintinweb/pi-subagents"
   ]
 }
