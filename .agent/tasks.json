@@ -1,9 +1,37 @@
 [
   {
-    "id": "task-19",
-    "title": "Execute pi worker runtime refactor plan task-by-task",
+    "id": "vm-extension-sync",
+    "title": "Sync Pi extension config to VM and refresh installed packages during VM sync",
+    "status": "done",
+    "notes": "Updated scripts/vm/pi-worker-instance so default sync now includes .pi/settings.json and .pi/npm/package manifests, re-links ~/.pi/agent/settings.json on VM, and runs npm install in .pi/npm when Pi package config changes. Verified with bash -n.",
+    "updatedAt": "2026-04-21T14:12:05.417Z"
+  },
+  {
+    "id": "telegram-reload-command",
+    "title": "Add Telegram /reload command to inject /reload into active Pi tmux session",
+    "status": "done",
+    "notes": "Added exact /reload handling in Telegram poller and bot help text. Bot now sends literal /reload plus Enter to active tmux Pi session via tmux send-keys. Verified with bun test scripts/vm/lib/telegram-poller.test.ts. Full tsconfig typecheck still has pre-existing unrelated failures in telegram-api.test.ts and pi-worker-telegram-runner.ts.",
+    "updatedAt": "2026-04-21T14:17:09.001Z"
+  },
+  {
+    "id": "telegram-restart-gateway-command",
+    "title": "Add Telegram /restart-gateway command",
+    "status": "done",
+    "notes": "Added /restart-gateway command in Telegram poller and bot help. Command restarts tmux session theo-pi-gateway. Verified with bun test scripts/vm/lib/telegram-poller.test.ts and bash -n on VM scripts.",
+    "updatedAt": "2026-04-21T14:29:51.762Z"
+  },
+  {
+    "id": "vm-live-update-bot",
+    "title": "Sync Telegram bot changes to VM and restart live bot process",
+    "status": "done",
+    "notes": "Synced VM scripts with explicit VM repo path, patched gateway webhook command handler for /reload and /restart-gateway, restarted gateway on VM, fixed execute bit on gateway wrapper, and verified via local webhook POST to /telegram/webhook returning ok for /help.",
+    "updatedAt": "2026-04-21T15:14:46.527Z"
+  },
+  {
+    "id": "repair-telegram-bot-runtime",
+    "title": "Repair Telegram bot runtime supervision to include telegram-runner/poller sessions and prevent non-responsive bot state",
     "status": "in_progress",
-    "notes": "Completed Tasks 1-6 of docs/plans/2026-04-16-pi-worker-runtime-refactor-plan.md plus follow-up hardening for Telegram final-answer relay. Verified npm run check, npm run test:vm, bun test scripts/vm/lib/*.test.ts scripts/vm/lib/backends/*.test.ts, real VM direct runner checks for prompt edge cases, and live gateway/bot restart behavior. Remaining planned major work still starts at Task 7 supervisor Bun core. Before continuing, current branch is being reviewed and packaged for merge to main as stable intermediate milestone.",
-    "updatedAt": "2026-04-19T13:55:35.798Z"
+    "notes": "Diagnosed live VM: gateway up, worker up, telegram poller session missing while runner session existed. Restarted poller to restore responses; now patching local VM scripts/bootstrap so bot management covers both sessions and status/logs reflect actual runtime.",
+    "updatedAt": "2026-04-21T15:17:12.933Z"
   }
 ]
