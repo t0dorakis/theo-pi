@@ -126,7 +126,16 @@ async function handleTelegramCommand(message: TelegramMessage) {
   if (textValue === "/help" || textValue === "/start") {
     await telegramSendMessage(
       chatId,
-      ["Pi worker gateway commands:", "/run <prompt>", "/status", "/restart", "/logs", "/checkpoint [label]"].join("\n"),
+      [
+        "Pi worker gateway commands:",
+        "/run <prompt>",
+        "/status",
+        "/restart",
+        "/restart-gateway",
+        "/reload",
+        "/logs",
+        "/checkpoint [label]",
+      ].join("\n"),
     )
     return { ok: true }
   }
@@ -138,6 +147,22 @@ async function handleTelegramCommand(message: TelegramMessage) {
 
   if (textValue === "/restart") {
     const output = await runLocal(localScript(scriptDir, "pi-worker-restart"), [session])
+    await telegramSendMessage(chatId, output)
+    return { ok: true }
+  }
+
+  if (textValue === "/restart-gateway") {
+    await telegramSendMessage(chatId, "Gateway restart requested. Current gateway instance cannot restart itself from webhook handler.")
+    return { ok: true }
+  }
+
+  if (textValue === "/reload") {
+    const output = await runLocal("tmux", ["send-keys", "-t", session, "/reload", "C-m"])
+      .then(() => `Sent /reload to session ${session}`)
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        return `Failed to send /reload to session ${session}: ${message}`
+      })
     await telegramSendMessage(chatId, output)
     return { ok: true }
   }

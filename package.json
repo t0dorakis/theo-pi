@@ -45,6 +45,7 @@
     ]
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.34.49"
+    "@sinclair/typebox": "^0.34.49",
+    "acpx": "^0.6.1"
   }
 }
