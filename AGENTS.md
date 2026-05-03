@@ -2,6 +2,18 @@
 
 Local autonomous-work rules for Pi in this repo.
 
+## Claude usage rule
+
+**Always use `acpx claude exec` (claude-code via ACP subscription auth) — never call the Anthropic API directly.**
+
+Claude is signed in via subscription (`claude` CLI). Use it through acpx:
+```bash
+acpx --approve-all --format quiet claude exec "your prompt"
+cat file.md | acpx --approve-all --format quiet claude exec --file - "instructions"
+```
+
+Never use `ANTHROPIC_API_KEY` for Claude calls in scripts, automations, or ad-hoc queries. The subscription auth is free at point of use; the API key charges per token.
+
 ## Default operating mode
 
 - Prefer autonomous execution over asking for permission.
