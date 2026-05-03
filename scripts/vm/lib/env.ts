@@ -1,9 +1,15 @@
 import type { WorkerBackendId } from "./backend"
 
 export type AcpxConfig = {
-  command: string
   agent: string
+  sessionMode: "oneshot" | "persistent"
   cwd: string | undefined
+  /** Acpx session store root (separate from PI_WORKER_STATE_DIR). Default: ~/.pi-worker/acp */
+  stateDir: string
+  /** Per-turn timeout in milliseconds. Default: 10 minutes. */
+  timeoutMs: number
+  /** TTL for idle persistent sessions in hours. Default: 24. */
+  sessionTtlHours: number
 }
 
 export type SmolVmConfig = {
@@ -66,9 +72,12 @@ export function getRuntimeEnv(): RuntimeEnv {
     },
 
     acpx: {
-      command: process.env.ACPX_COMMAND ?? "acpx",
       agent: process.env.ACPX_AGENT ?? "pi",
+      sessionMode: (process.env.ACPX_SESSION_MODE === "persistent" ? "persistent" : "oneshot") as "oneshot" | "persistent",
       cwd: process.env.ACPX_CWD || undefined,
+      stateDir: process.env.ACPX_STATE_DIR ?? `${homeDir}/.pi-worker/acp`,
+      timeoutMs: intFromEnv("ACPX_TIMEOUT_MS", 10 * 60 * 1000),
+      sessionTtlHours: intFromEnv("ACPX_SESSION_TTL_HOURS", 24),
     },
 
     smolvm: {

@@ -13,7 +13,7 @@ export function createBackend(options: {
       return createTmuxBackend({
         session: options.env.session,
         captureLines: options.env.jobCaptureLines,
-        delegateScript: options.env.tmux?.delegateScript,
+        delegateScript: options.env.tmux.delegateScript,
         stateDir: options.env.stateDir,
         runLocal: options.runLocal,
       })
@@ -27,10 +27,11 @@ export function createBackend(options: {
     case "acpx":
       return createAcpxBackend({
         stateDir: options.env.stateDir,
-        acpxCommand: options.env.acpx.command,
+        acpxStateDir: options.env.acpx.stateDir,
         agent: options.env.acpx.agent,
         cwd: options.env.acpx.cwd,
-        runLocal: options.runLocal,
+        timeoutMs: options.env.acpx.timeoutMs,
+        sessionMode: options.env.acpx.sessionMode,
       })
     default:
       return assertNever(options.env.backend)
