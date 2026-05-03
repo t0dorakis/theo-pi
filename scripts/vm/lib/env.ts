@@ -1,24 +1,36 @@
 import type { WorkerBackendId } from "./backend"
 
+export type AcpxConfig = {
+  command: string
+  agent: string
+  cwd: string | undefined
+}
+
+export type SmolVmConfig = {
+  cliPath: string
+  vmName: string
+  sshKeyPath: string
+  backend: string
+  memoryMib: number
+  diskSizeMib: number
+  guestWorkdir: string
+  guestPiDir: string
+  hostPiAuthPath: string
+  hostPiSettingsPath: string
+  guestProvider: string
+  guestModel: string
+}
+
+export type TmuxConfig = {
+  /** Override path for the pi-worker-delegate script. */
+  delegateScript: string | undefined
+}
+
 export type RuntimeEnv = {
   backend: WorkerBackendId
-  // acpx backend
-  acpxCommand: string
-  acpxAgent: string
-  acpxCwd: string
-  // smolvm backend
-  smolvmCliPath: string
-  smolvmVmName: string
-  smolvmSshKeyPath: string
-  smolvmBackend: string
-  smolvmMemoryMib: number
-  smolvmDiskSizeMib: number
-  smolvmGuestWorkdir: string
-  smolvmGuestPiDir: string
-  smolvmHostPiAuthPath: string
-  smolvmHostPiSettingsPath: string
-  smolvmGuestProvider: string
-  smolvmGuestModel: string
+  tmux: TmuxConfig
+  acpx: AcpxConfig
+  smolvm: SmolVmConfig
 
   homeDir: string
   stateDir: string
@@ -48,21 +60,31 @@ export function getRuntimeEnv(): RuntimeEnv {
   const homeDir = process.env.HOME ?? process.cwd()
   return {
     backend: (process.env.PI_WORKER_BACKEND ?? "tmux") as WorkerBackendId,
-    acpxCommand: process.env.ACPX_COMMAND ?? "acpx",
-    acpxAgent: process.env.ACPX_AGENT ?? "pi",
-    acpxCwd: process.env.ACPX_CWD ?? "",
-    smolvmCliPath: process.env.SMOLVM_CLI_PATH ?? "smolvm",
-    smolvmVmName: process.env.SMOLVM_VM_NAME ?? "",
-    smolvmSshKeyPath: process.env.SMOLVM_SSH_KEY_PATH ?? "",
-    smolvmBackend: process.env.SMOLVM_BACKEND ?? "apple",
-    smolvmMemoryMib: intFromEnv("SMOLVM_MEMORY_MIB", 4096),
-    smolvmDiskSizeMib: intFromEnv("SMOLVM_DISK_SIZE_MIB", 20480),
-    smolvmGuestWorkdir: process.env.SMOLVM_GUEST_WORKDIR ?? "/root/jobs",
-    smolvmGuestPiDir: process.env.SMOLVM_GUEST_PI_DIR ?? "",
-    smolvmHostPiAuthPath: process.env.SMOLVM_HOST_PI_AUTH_PATH ?? `${homeDir}/.pi/auth.json`,
-    smolvmHostPiSettingsPath: process.env.SMOLVM_HOST_PI_SETTINGS_PATH ?? "",
-    smolvmGuestProvider: process.env.SMOLVM_GUEST_PROVIDER ?? "",
-    smolvmGuestModel: process.env.SMOLVM_GUEST_MODEL ?? "",
+
+    tmux: {
+      delegateScript: process.env.PI_WORKER_DELEGATE_SCRIPT || undefined,
+    },
+
+    acpx: {
+      command: process.env.ACPX_COMMAND ?? "acpx",
+      agent: process.env.ACPX_AGENT ?? "pi",
+      cwd: process.env.ACPX_CWD || undefined,
+    },
+
+    smolvm: {
+      cliPath: process.env.SMOLVM_CLI_PATH ?? "smolvm",
+      vmName: process.env.SMOLVM_VM_NAME ?? "",
+      sshKeyPath: process.env.SMOLVM_SSH_KEY_PATH ?? "",
+      backend: process.env.SMOLVM_BACKEND ?? "apple",
+      memoryMib: intFromEnv("SMOLVM_MEMORY_MIB", 4096),
+      diskSizeMib: intFromEnv("SMOLVM_DISK_SIZE_MIB", 20480),
+      guestWorkdir: process.env.SMOLVM_GUEST_WORKDIR ?? "/root/jobs",
+      guestPiDir: process.env.SMOLVM_GUEST_PI_DIR ?? "",
+      hostPiAuthPath: process.env.SMOLVM_HOST_PI_AUTH_PATH ?? `${homeDir}/.pi/auth.json`,
+      hostPiSettingsPath: process.env.SMOLVM_HOST_PI_SETTINGS_PATH ?? "",
+      guestProvider: process.env.SMOLVM_GUEST_PROVIDER ?? "",
+      guestModel: process.env.SMOLVM_GUEST_MODEL ?? "",
+    },
 
     homeDir,
     stateDir: process.env.PI_WORKER_STATE_DIR ?? `${homeDir}/.pi-worker`,

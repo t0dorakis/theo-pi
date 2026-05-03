@@ -110,9 +110,8 @@ test("acpx backend writes failed result on exec error", async () => {
   const job = makeJob()
   await backend.submitPrompt(job)
 
-  // readResult returns null (no answer, failed status doesn't throw in this path)
-  const result = await backend.readResult(job)
-  expect(result).toBeNull()
+  // readResult throws on failure — callers must distinguish pending (null) from error (throw)
+  await expect(backend.readResult(job)).rejects.toThrow("acpx exec failed")
 
   // Confirm the result file records failure
   const channel = createResultChannel(stateDir)
@@ -153,6 +152,36 @@ test("acpx backend sessionHealth returns not-ok when acpx missing", async () => 
   expect(health.detail).toContain("acpx not found")
 })
 
+test("acpx backend readResult returns null when result file is absent", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "acpx-backend-"))
+
+  const backend = createAcpxBackend({
+    stateDir,
+    agent: "pi",
+    runLocal: async () => "",
+  })
+
+  // No submitPrompt called — result file does not exist
+  const result = await backend.readResult(makeJob())
+  expect(result).toBeNull()
+})
+
+test("acpx backend submit times out and writes failed result", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "acpx-backend-"))
+
+  const backend = createAcpxBackend({
+    stateDir,
+    agent: "pi",
+    timeoutMs: 10, // 10ms — will time out immediately
+    runLocal: async () => new Promise((resolve) => setTimeout(() => resolve("late"), 200)),
+  })
+
+  const job = makeJob({ id: "job-timeout" })
+  await backend.submitPrompt(job)
+
+  await expect(backend.readResult(job)).rejects.toThrow("timed out")
+})
+
 test("acpx backend cancel is a no-op and does not throw", async () => {
   const stateDir = await mkdtemp(join(tmpdir(), "acpx-backend-"))
 
@@ -162,5 +191,5 @@ test("acpx backend cancel is a no-op and does not throw", async () => {
     runLocal: async () => "",
   })
 
-  await expect(backend.cancel?.("job-acpx-001")).resolves.toBeUndefined()
+  await expect(backend.cancel("job-acpx-001")).resolves.toBeUndefined()
 })
