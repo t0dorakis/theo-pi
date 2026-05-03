@@ -261,6 +261,7 @@ import { createFileSessionStore } from "acpx/runtime"
 import provisionFlow from "../flows/provision-vm.flow"
 import { readFleetConfig, writeFleetConfig, type FleetVm } from "./fleet-config"
 
+// Imports: execFile, promisify from node:child_process/util; createProvisionFlow (factory)
 export function createFleetManager(options: {
   stateDir: string
   acpxStateDir: string
@@ -271,7 +272,7 @@ export function createFleetManager(options: {
     // resolveAgentCommand will use this when profile matches a VM id
     const overrides: Record<string, string> = {}
     for (const [id, vm] of Object.entries(fleetVms)) {
-      overrides[id] = `orbctl run -m ${vm.orbName} -- npx pi-acp@latest`
+      overrides[id] = `orbctl run -m ${vm.orbName} bash -c 'npx pi-acp@^0.0.26'`
     }
 
     return new FlowRunner({
@@ -380,6 +381,23 @@ This lets a human or orchestrator agent manage the fleet entirely via Telegram m
 5. **File write via orbctl** — `echo content | orbctl run -m <name> bash -c 'cat > path'` ✅ tested.
 
 ---
+
+
+---
+
+## Bug fixes applied (claude-code grill)
+
+**Bug 1 — write_env stdin (CRITICAL):** `execFile` ignores `input` option — silent empty file.
+Fix: use `spawn` with `child.stdin.write(content)` / `child.stdin.end()`.
+
+**Bug 2 — verify profile is not a function:** `AcpNodeDefinition.profile` is `string | undefined`.
+Fix: change `export default defineFlow(...)` to `export function createProvisionFlow(vmName: string)` factory.
+Call site: `runner.run(createProvisionFlow(input.name), input)`.
+
+**Bug 3 — `--` flag in orbctl:** confirmed error. Fix: `orbctl run -m <name> bash -c 'npx pi-acp@^0.0.26'`.
+
+**Bug 4 — execFile not imported in fleet-runner.ts:** add `import { execFile } from "node:child_process"` + `promisify`. Use `execAsync` throughout.
+
 
 ## Known open questions (not assumed)
 
