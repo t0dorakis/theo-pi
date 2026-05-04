@@ -13,6 +13,16 @@ const execFileAsync = promisify(execFile)
 const env = getWorkerEnv()
 const scriptDir = getScriptDir(import.meta.url)
 const queue = createJobQueue(env.stateDir, { backend: "acpx" })
+const telegramQueue = {
+  reapExpiredLeases: queue.reapExpiredLeases,
+  async claimNextJob() {
+    const jobs = await queue.listJobs()
+    return jobs.find((job) => job.status === "pending" && !job.telegramDeliveredAt && /^\d+$/.test(job.chatId)) ?? null
+  },
+  completeJob: queue.completeJob,
+  failJob: queue.failJob,
+  markDelivered: queue.markDelivered,
+}
 
 if (!env.telegramBotToken) {
   console.error("Missing TELEGRAM_BOT_TOKEN")
@@ -40,7 +50,7 @@ const telegram = createTelegramApi({
 })
 
 const runner = createTelegramRunner({
-  queue,
+  queue: telegramQueue,
   jobs: {
     async runJob(jobId: string) {
       try {

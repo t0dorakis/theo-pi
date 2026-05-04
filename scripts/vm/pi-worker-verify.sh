@@ -33,6 +33,7 @@ check pi-worker-run-job
 check pi-worker-gateway
 check pi-worker-telegram-bot
 check pi-worker-telegram-runner
+check pi-worker-acp
 check pi-worker-gateway-smoke-test
 check pi-worker-supervisor-smoke-test
 check pi-worker-acpx-smoke-test

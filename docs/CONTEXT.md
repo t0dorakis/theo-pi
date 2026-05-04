@@ -1,6 +1,6 @@
 # Pi Worker Context
 
-Pi worker runs queued prompts from HTTP, Telegram, CLI, or an ACP-compatible stdio adapter through ACPX. Plans under `docs/plans/` describe history; this file describes current branch reality.
+Pi worker runs queued prompts from HTTP, Telegram, CLI, or an ACP-compatible stdio adapter through ACPX. `docs/plans/pi-worker-acpx-roadmap.md` tracks current follow-up work; this file describes current branch reality.
 
 ## Language
 

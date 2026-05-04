@@ -188,7 +188,7 @@ Security notes:
 - set `PI_WORKER_GATEWAY_TOKEN`; gateway refuses to start without it
 - set `TELEGRAM_WEBHOOK_SECRET` before exposing `/telegram/webhook`; requests must include `x-telegram-bot-api-secret-token`
 - `TELEGRAM_ALLOWED_CHAT_IDS` limits bot actions by chat id, but does not replace webhook authentication
-- `docs/plans/2026-04-14-personal-autonomous-pi-worker-bootstrap-checklist.md` — step-by-step bootstrap checklist
+- `docs/plans/pi-worker-acpx-roadmap.md` — current pi-worker ACPX follow-up roadmap
 
 ## Development
 
