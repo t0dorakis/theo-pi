@@ -1,5 +1,8 @@
 # acpx Integration Roadmap — Architecture Review
 
+> Status: partially implemented; see `docs/CONTEXT.md` for current architecture.
+
+
 **Reviewer:** claude-code via acpx (claude-agent-acp)  
 **Date:** 2026-04-21  
 **Verdict:** Right direction, consistently under-specifies the hard parts. 16 issues found. Two are structural blockers.

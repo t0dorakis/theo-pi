@@ -1,5 +1,8 @@
 # acpx Full Integration Roadmap
 
+> Status: partially implemented; ACPX runtime, persistent sessions, event logs, per-session locks, reset, and cancellation landed; streaming, bundles, flows, and attachments remain pending.
+
+
 **Status:** Draft — under review  
 **Date:** 2026-04-21  
 **Scope:** Evolve pi-worker from tmux-scraping prototype to a production-grade ACP-first VM orchestration system using acpx.

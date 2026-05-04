@@ -20,8 +20,8 @@ WORKSPACE="$(echo "$STATUS" | jq -r '.workspacePath // empty')"
 [[ -n "$WORKSPACE" ]] || fail 'status returns workspace path'
 pass 'status returns workspace path'
 
-echo "$STATUS" | jq -e '.sessionName == '"\"$SESSION\""'' >/dev/null || fail 'status returns session name'
-pass 'status returns session name'
+echo "$STATUS" | jq -e '.workerName == '"\"$SESSION\""'' >/dev/null || fail 'status returns worker name'
+pass 'status returns worker name'
 
 [[ -f "${PI_WORKER_STATE_DIR:-$HOME/.pi-worker}/state.json" ]] || fail 'state.json exists'
 [[ -f "${PI_WORKER_STATE_DIR:-$HOME/.pi-worker}/heartbeat.json" ]] || fail 'heartbeat.json exists'

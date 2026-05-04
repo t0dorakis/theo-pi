@@ -3,21 +3,21 @@ import { execFile } from "node:child_process"
 import { mkdir } from "node:fs/promises"
 import { promisify } from "node:util"
 
-import { getRuntimeEnv } from "./lib/env"
+import { getWorkerEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
 import { getScriptDir, localScript } from "./lib/paths"
 import { createStateStore } from "./lib/state-store"
 import { requestCancelJobsForChat, resetWorkerChatSession } from "./lib/worker-runner"
 
 const execFileAsync = promisify(execFile)
-const env = getRuntimeEnv()
+const env = getWorkerEnv()
 const scriptDir = getScriptDir(import.meta.url)
 const stateStore = createStateStore(env.stateDir)
 const queue = createJobQueue(env.stateDir, { backend: "acpx" })
 
 const token = env.telegramBotToken
 const allowedChatIds = env.telegramAllowedChatIds
-const session = env.session
+const workerName = env.workerName
 const pollTimeoutSeconds = env.telegramPollTimeoutSeconds
 const logsLines = env.telegramLogLines
 const typingIntervalMs = env.telegramTypingIntervalMs
@@ -157,7 +157,7 @@ async function handleMessage(message: TelegramMessage) {
       const stored = await stateStore.readHealth()
       const output = stored
         ? JSON.stringify(stored, null, 2)
-        : await runLocal(localScript(scriptDir, "pi-worker-status"), [session, "--json"])
+        : await runLocal(localScript(scriptDir, "pi-worker-status"), [workerName, "--json"])
       await sendMessage(chatId, output)
       return
     }
@@ -170,7 +170,7 @@ async function handleMessage(message: TelegramMessage) {
     }
 
     if (textValue === "/restart") {
-      const output = await runLocal(localScript(scriptDir, "pi-worker-restart"), [session])
+      const output = await runLocal(localScript(scriptDir, "pi-worker-restart"), [workerName])
       await sendMessage(chatId, output)
       return
     }
@@ -267,7 +267,7 @@ async function poll() {
   }
 }
 
-console.log(`Starting Telegram Pi worker bot for session ${session}`)
+console.log(`Starting Telegram Pi worker bot for worker ${workerName}`)
 await ensureDirs()
 void drainQueue()
 await poll()

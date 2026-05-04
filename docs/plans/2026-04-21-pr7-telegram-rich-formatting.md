@@ -1,7 +1,10 @@
 # PR7: Telegram Rich Formatting Layer
 
+> Status: partial; final-answer formatting exists, structured live event streaming remains pending.
+
+
 **Branch:** `feat/pr7-telegram-rich-formatting`
-**Status:** pending
+**Status:** partial
 **Depends on:** PR2 (`feat/pr2-acpx-streaming-telegram`)
 **Estimated scope:** ~350 LOC new, ~60 LOC changed
 

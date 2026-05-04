@@ -2,8 +2,8 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 
 import { acquireSessionLock } from "./session-lock"
-import { createAcpxBackend } from "./backends/acpx-backend"
-import { getRuntimeEnv, type RuntimeEnv } from "./env"
+import { createAcpxRuntimeAdapter } from "./acpx/runtime-adapter"
+import { getWorkerEnv, type WorkerEnv } from "./env"
 import { createJobQueue } from "./jobs"
 import { getRuntimePaths } from "./paths"
 import { createResultChannel } from "./result-channel"
@@ -14,7 +14,7 @@ export type WorkerRunResult =
 
 const runtimeCache = new Map<string, ReturnType<typeof createAcpxRuntimeUncached>>()
 
-function runtimeCacheKey(env: RuntimeEnv) {
+function runtimeCacheKey(env: WorkerEnv) {
   return JSON.stringify({
     stateDir: env.stateDir,
     acpxStateDir: env.acpx.stateDir,
@@ -25,8 +25,8 @@ function runtimeCacheKey(env: RuntimeEnv) {
   })
 }
 
-function createAcpxRuntimeUncached(env: RuntimeEnv) {
-  return createAcpxBackend({
+function createAcpxRuntimeUncached(env: WorkerEnv) {
+  return createAcpxRuntimeAdapter({
     stateDir: env.stateDir,
     acpxStateDir: env.acpx.stateDir,
     agent: env.acpx.agent,
@@ -37,7 +37,7 @@ function createAcpxRuntimeUncached(env: RuntimeEnv) {
   })
 }
 
-function createAcpxRuntime(env: RuntimeEnv) {
+function createAcpxRuntime(env: WorkerEnv) {
   const key = runtimeCacheKey(env)
   const cached = runtimeCache.get(key)
   if (cached) return cached
@@ -46,22 +46,22 @@ function createAcpxRuntime(env: RuntimeEnv) {
   return runtime
 }
 
-function cancelPath(env: RuntimeEnv, jobId: string) {
+function cancelPath(env: WorkerEnv, jobId: string) {
   return join(getRuntimePaths(env.stateDir, import.meta.url).jobCancelsDir, `${jobId}.cancel`)
 }
 
-async function cancelRequested(env: RuntimeEnv, jobId: string) {
+async function cancelRequested(env: WorkerEnv, jobId: string) {
   return Boolean(await readFile(cancelPath(env, jobId), "utf8").catch(() => null))
 }
 
-function turnLockKey(env: RuntimeEnv, job: { id: string; chatId: string }) {
+function turnLockKey(env: WorkerEnv, job: { id: string; chatId: string }) {
   return env.acpx.sessionMode === "persistent"
     ? `acpx-turn-${env.acpx.agent}-${job.chatId}`
     : `acpx-turn-${job.id}`
 }
 
-export async function runQueuedJob(jobId: string, env: RuntimeEnv = getRuntimeEnv()): Promise<WorkerRunResult> {
-  const runnerId = `runner-${env.session}-${process.pid}`
+export async function runQueuedJob(jobId: string, env: WorkerEnv = getWorkerEnv()): Promise<WorkerRunResult> {
+  const runnerId = `runner-${env.workerName}-${process.pid}`
   const leaseDurationSeconds = Math.max(env.jobTimeoutSeconds, Math.ceil(env.acpx.timeoutMs / 1000)) + 120
   const queue = createJobQueue(env.stateDir, { backend: "acpx", leaseDurationSeconds })
   const resultChannel = createResultChannel(env.stateDir)
@@ -159,7 +159,7 @@ export async function runQueuedJob(jobId: string, env: RuntimeEnv = getRuntimeEn
   }
 }
 
-export async function requestCancelJobsForChat(chatId: string, env: RuntimeEnv = getRuntimeEnv()) {
+export async function requestCancelJobsForChat(chatId: string, env: WorkerEnv = getWorkerEnv()) {
   const queue = createJobQueue(env.stateDir, { backend: "acpx" })
   const paths = getRuntimePaths(env.stateDir, import.meta.url)
   await mkdir(paths.jobCancelsDir, { recursive: true })
@@ -171,12 +171,12 @@ export async function requestCancelJobsForChat(chatId: string, env: RuntimeEnv =
   return running.map((job) => job.id)
 }
 
-export async function getWorkerRuntimeHealth(env: RuntimeEnv = getRuntimeEnv()) {
+export async function getAcpxRuntimeHealth(env: WorkerEnv = getWorkerEnv()) {
   const runtime = createAcpxRuntime(env)
   return runtime.sessionHealth()
 }
 
-export async function resetWorkerChatSession(chatId: string, env: RuntimeEnv = getRuntimeEnv()) {
+export async function resetWorkerChatSession(chatId: string, env: WorkerEnv = getWorkerEnv()) {
   const runtime = createAcpxRuntime(env)
   await runtime.resetChatSession(chatId)
 }

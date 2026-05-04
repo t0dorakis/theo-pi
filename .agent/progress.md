@@ -1,7 +1,7 @@
 # Agent Progress
 
 ## Current objective
-- Simplify pi-worker to acpx-only execution path and keep OrbStack smoke fast/repeatable.
+- Keep pi-worker ACPX runtime current, documented, and linguistically consistent.
 
 ## Latest completed work
 - Removed backend abstraction layer and deleted smolvm + tmux execution backends from worker runtime path.
@@ -19,14 +19,19 @@
 - Patched smoke/verify/bootstrap docs and wrappers for acpx-only path.
 - Fixed OrbStack ACPX failures caused by placeholder exported API keys in `~/.env.pi`.
 - Patched `pi-worker-instance` defaults to current OrbStack VM/repo path.
+- Added current `docs/CONTEXT.md`, `docs/glossary.md`, and ADRs for ACPX-only execution, queue authority, ACP session locks, chatId routing, and per-session turn locks.
+- Rewrote `docs/architecture.md` to describe ACPX runtime adapter, queue/result-channel split, current state layout, reset/cancel, and remaining work.
+- Renamed worker-domain types/fields from session-oriented names to worker-oriented names: `WorkerEnv`, `WorkerState`, `WorkerDaemonStatus`, `workerName`, and `workspacePath`.
+- Renamed ACPX adapter from `lib/backends/acpx-backend.ts` to `lib/acpx/runtime-adapter.ts` and updated tests/imports.
+- Marked ACPX roadmap/PR plan docs with status headers.
 
 ## Verification
 - `npm run check`
 - `npm run check:ts`
-- `bun test scripts/vm/lib/worker-runner.test.ts scripts/vm/lib/backends/acpx-backend-oneshot.test.ts scripts/vm/lib/backends/acpx-backend-persistent.test.ts`
+- `bun test scripts/vm/lib/worker-runner.test.ts scripts/vm/lib/acpx/runtime-adapter-oneshot.test.ts scripts/vm/lib/acpx/runtime-adapter-persistent.test.ts scripts/vm/lib/state-store.test.ts scripts/vm/lib/health.test.ts scripts/vm/lib/result-channel.test.ts`
 - `npm run test:vm` (local tmux-less environment now runs gateway health/run/job/reset-validation/numeric-chatId checks; supervisor-only checks skip)
 - OrbStack sync: `bash scripts/vm/pi-worker-instance sync --restart all`
-- OrbStack acpx smoke: `bash scripts/vm/pi-worker-instance smoke-acpx review-fixes` → both queued jobs done, answers correct, persistent session file reused
+- OrbStack acpx smoke: `bash scripts/vm/pi-worker-instance smoke-acpx naming-docs-final` → both queued jobs done, answers correct, persistent session file reused
 - OrbStack event log inspection showed `session_ready`, `status`, `text_delta`, and `turn_result` records for latest jobs.
 - prior guest gateway smoke: `/run` queued job, `/jobs/<id>` returned `status: done`, result file answer `7`
 

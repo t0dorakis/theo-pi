@@ -3,7 +3,7 @@ import { join } from "node:path"
 
 import { readJsonFile, writeJsonFile } from "./json-file"
 import { getRuntimePaths } from "./paths"
-import type { HealthState, SessionState, WorkerJob } from "./types"
+import type { HealthState, WorkerState, WorkerJob } from "./types"
 
 type JobRequestRecord = {
   id: string
@@ -58,17 +58,17 @@ export function createStateStore(stateDir: string) {
       await writeJsonFile(join(stateDir, "heartbeat.json"), heartbeat)
     },
     async readState() {
-      return readJsonFile<SessionState>(join(stateDir, "state.json"))
+      return readJsonFile<WorkerState>(join(stateDir, "state.json"))
     },
-    async writeState(state: SessionState) {
+    async writeState(state: WorkerState) {
       await writeJsonFile(join(stateDir, "state.json"), state)
     },
-    async readSessionState(sessionName: string) {
-      return readJsonFile<SessionState>(join(stateDir, "sessions", `${sessionName}.json`))
+    async readWorkerState(workerName: string) {
+      return readJsonFile<WorkerState>(join(stateDir, "sessions", `${workerName}.json`))
     },
-    async writeSessionState(session: SessionState) {
-      await writeJsonFile(join(stateDir, "sessions", `${session.activeSessionName}.json`), session)
-      await writeJsonFile(join(stateDir, "state.json"), session)
+    async writeWorkerState(worker: WorkerState) {
+      await writeJsonFile(join(stateDir, "sessions", `${worker.workerName}.json`), worker)
+      await writeJsonFile(join(stateDir, "state.json"), worker)
     },
     async readTelegramJob(id: string) {
       const job = await readJsonFile<WorkerJob>(join(paths.telegramJobsDir, `${id}.json`))

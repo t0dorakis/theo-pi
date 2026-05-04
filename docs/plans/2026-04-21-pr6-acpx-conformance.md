@@ -1,7 +1,10 @@
 # PR6: ACP conformance test suite for Pi adapter health
 
+> Status: partial; ACPX smoke and local tests exist, broader conformance work remains future work.
+
+
 **Branch:** `feat/pr6-acpx-conformance`  
-**Status:** pending  
+**Status:** partial
 **Depends on:** none — independent PR, can merge at any time  
 **Estimated scope:** ~120 LOC new, 0 LOC changed in production code
 
@@ -85,11 +88,11 @@ import { writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { promisify } from "node:util"
 
-import { getRuntimeEnv } from "./lib/env"
+import { getWorkerEnv } from "./lib/env"
 import { getScriptDir } from "./lib/paths"
 
 const execFileAsync = promisify(execFile)
-const env = getRuntimeEnv()
+const env = getWorkerEnv()
 const scriptDir = getScriptDir(import.meta.url)
 
 // Path to the conformance runner — installed as part of acpx package

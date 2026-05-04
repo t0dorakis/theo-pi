@@ -3,14 +3,14 @@
     "id": "task-19",
     "title": "Execute pi worker runtime refactor plan task-by-task",
     "status": "in_progress",
-    "notes": "Completed Tasks 1-6 of docs/plans/2026-04-16-pi-worker-runtime-refactor-plan.md plus follow-up hardening for Telegram final-answer relay. Then simplified current branch to acpx-only execution path: removed smolvm/backend-registry/tmux execution code, introduced acpx-only worker-runner, routed gateway /run through queued acpx execution, added repeatable acpx smoke test, and verified OrbStack end-to-end for both direct job runs and gateway-queued jobs. Follow-up hardening added serialized acpx runner execution, duplicate-running-job guard, lease heartbeats, runner logging, persistent-mode smoke default, stale lock cleanup, acpx queue default, and current OrbStack pi-worker-instance defaults. Latest takeover synced to OrbStack and passed `pi-worker-instance smoke-acpx takeover-review`. Placeholder API keys in ~/.env.pi were also identified as root cause of broken ACPX auth on guest and documented/fixed in template. Remaining major work still includes deciding how much tmux-based supervisor process management to keep and broader Task 7+ supervisor evolution.",
-    "updatedAt": "2026-05-04T14:05:00.000Z"
+    "notes": "Completed Tasks 1-6 of docs/plans/2026-04-16-pi-worker-runtime-refactor-plan.md plus follow-up hardening for Telegram final-answer relay. Then simplified current branch to acpx-only execution path: removed smolvm/backend-registry/tmux execution code, introduced acpx-only worker-runner, routed gateway /run through queued acpx execution, added repeatable acpx smoke test, and verified OrbStack end-to-end for both direct job runs and gateway-queued jobs. Follow-up hardening added serialized acpx runner execution, duplicate-running-job guard, lease heartbeats, runner logging, persistent-mode smoke default, stale lock cleanup, acpx queue default, and current OrbStack pi-worker-instance defaults. Latest takeover synced to OrbStack and passed `pi-worker-instance smoke-acpx takeover-review`. Placeholder API keys in ~/.env.pi were also identified as root cause of broken ACPX auth on guest and documented/fixed in template. Remaining major work still includes deciding how much tmux-based supervisor process management to keep and broader Task 7+ supervisor evolution. Latest docs/naming pass added CONTEXT/glossary/ADRs, rewrote architecture docs, marked ACPX plan statuses, renamed WorkerEnv/WorkerState/workerName, and moved ACPX adapter to acpx/runtime-adapter.",
+    "updatedAt": "2026-05-04T15:05:00.000Z"
   },
   {
     "id": "task-20",
     "title": "Persist ACPX structured job event logs",
     "status": "done",
-    "notes": "Added scripts/vm/lib/acpx-event-log.ts and wired acpx-backend to persist session_ready, normalized AcpRuntimeEvent values, and turn_result records under ~/.pi-worker/jobs/events/<jobId>.ndjson. Verified locally with unit tests and on OrbStack by inspecting event files after smoke.",
+    "notes": "Added scripts/vm/lib/acpx-event-log.ts and wired ACPX runtime adapter to persist session_ready, normalized AcpRuntimeEvent values, and turn_result records under ~/.pi-worker/jobs/events/<jobId>.ndjson. Verified locally with unit tests and on OrbStack by inspecting event files after smoke.",
     "updatedAt": "2026-05-04T14:55:00.000Z"
   },
   {

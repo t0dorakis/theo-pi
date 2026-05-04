@@ -1,7 +1,10 @@
 # PR5: FlowRunner integration with Telegram checkpoint gates
 
+> Status: deferred; flow-run support remains future work.
+
+
 **Branch:** `feat/pr5-acpx-flows`  
-**Status:** pending  
+**Status:** deferred
 **Depends on:** PR1, PR3, PR4  
 **Estimated scope:** ~500 LOC new, ~150 LOC changed
 
@@ -126,7 +129,7 @@ Entry point for running a named flow. Can be invoked directly (`bun pi-worker-fl
 import { FlowRunner } from "acpx/flows"
 import { resolveAgentCommand } from "acpx/runtime"
 
-const env = getRuntimeEnv()
+const env = getWorkerEnv()
 const flowName = process.argv[2]
 const inputJson = process.argv[3] ?? "{}"
 
@@ -410,7 +413,7 @@ Env var: `PI_WORKER_FLOW_APPROVE_TIMEOUT_MINUTES` (default: 30). If the user doe
 
 ## Task Checklist
 
-- [ ] Add `flowsDir`, `flowRegistryFile` to `env.ts` + `getRuntimeEnv()`
+- [ ] Add `flowsDir`, `flowRegistryFile` to `env.ts` + `getWorkerEnv()`
 - [ ] Create `scripts/vm/flows/flow-registry.ts`
 - [ ] Create `scripts/vm/pi-worker-flow-run.ts`
 - [ ] Create `scripts/vm/flows/diagnose-and-fix.flow.ts`

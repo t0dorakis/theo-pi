@@ -1,13 +1,13 @@
 /**
- * acpx backend — in-process ACP agent via acpx/runtime.
+ * ACPX runtime adapter — bridges WorkerJob records to acpx/runtime.
  *
- * Replaces three previous acpx variants (subprocess exec, acpx-runtime,
- * acpx-persistent) with one backend controlled by sessionMode:
+ * One adapter supports two ACP session modes:
  *
  *   "oneshot"    — fresh session per job (default). Stateless, no context.
  *   "persistent" — one session per chat. Agent accumulates conversation context.
  *
  * Select session behavior with ACPX_SESSION_MODE=oneshot|persistent.
+ * Queue state remains lifecycle authority; result/event files are artifacts.
  */
 
 import { createAcpxEventLog } from "../acpx-event-log"
@@ -17,7 +17,7 @@ import { nowIso } from "../time"
 import type { WorkerJob } from "../types"
 import type { AcpRuntimeTurnResult } from "acpx/runtime"
 
-export type AcpxBackendOptions = {
+export type AcpxRuntimeAdapterOptions = {
   stateDir: string
   acpxStateDir: string
   agent: string
@@ -46,7 +46,7 @@ const SESSION_RETRY_ERROR_CODES = new Set([
   "ACP_BACKEND_MISSING",
 ])
 
-export function createAcpxBackend(options: AcpxBackendOptions): AcpxRuntimeAdapter {
+export function createAcpxRuntimeAdapter(options: AcpxRuntimeAdapterOptions): AcpxRuntimeAdapter {
   const resultChannel = createResultChannel(options.stateDir)
   const eventLog = createAcpxEventLog(options.stateDir)
   const activeTurns = new Map<string, () => Promise<void>>()

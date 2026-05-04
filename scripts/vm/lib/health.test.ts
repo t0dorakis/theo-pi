@@ -7,7 +7,7 @@ test("marks running heartbeat as healthy", () => {
   const state: HealthState = {
     ok: false,
     daemonStatus: "running",
-    sessionName: "theo-pi",
+    workerName: "theo-pi",
     workspacePath: "/tmp/workspace",
     pid: 123,
     restartCount: 1,
@@ -29,7 +29,7 @@ test("marks stale heartbeat as unhealthy", () => {
   const state: HealthState = {
     ok: true,
     daemonStatus: "running",
-    sessionName: "theo-pi",
+    workerName: "theo-pi",
     workspacePath: "/tmp/workspace",
     pid: 123,
     restartCount: 1,

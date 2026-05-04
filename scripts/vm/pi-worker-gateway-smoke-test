@@ -29,7 +29,7 @@ trap cleanup EXIT
 
 export HOME="$TMPDIR_ROOT/home"
 export PATH="$HOME/bin:$HOME/.bun/bin:$PATH"
-export PI_WORKER_SESSION="smoke-gateway"
+export PI_WORKER_NAME="smoke-gateway"
 export PI_WORKER_GATEWAY_PORT="${PI_WORKER_GATEWAY_PORT:-18787}"
 export PI_WORKER_GATEWAY_TOKEN=test-token
 export TELEGRAM_WEBHOOK_SECRET=telegram-secret
@@ -48,7 +48,7 @@ if [[ "$HAVE_TMUX" -eq 1 ]]; then
 else
   skip 'tmux missing; supervisor-backed gateway endpoints skipped'
   cat > "$HOME/.pi-worker/health.json" <<EOF
-{"ok":true,"daemonStatus":"running","sessionName":"smoke-gateway","workspacePath":"$HOME/workspaces/demo","pid":null,"restartCount":0,"lastHeartbeatAt":null,"lastSuccessAt":null,"bootstrapVersion":null,"notes":["smoke health fixture"]}
+{"ok":true,"daemonStatus":"running","workerName":"smoke-gateway","workspacePath":"$HOME/workspaces/demo","pid":null,"restartCount":0,"lastHeartbeatAt":null,"lastSuccessAt":null,"bootstrapVersion":null,"notes":["smoke health fixture"]}
 EOF
 fi
 
@@ -71,7 +71,7 @@ curl_json() {
 }
 
 HEALTH="$(curl -sS "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/health")"
-echo "$HEALTH" | jq -e '.daemonStatus == "running" and (.backend.ok == true or .backend.ok == false)' >/dev/null || fail 'health endpoint'
+echo "$HEALTH" | jq -e '.daemonStatus == "running" and (.acpx.ok == true or .acpx.ok == false)' >/dev/null || fail 'health endpoint'
 pass 'health endpoint'
 
 RUN_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/run" -H 'content-type: application/json' -d '{"prompt":"hello from gateway"}')"

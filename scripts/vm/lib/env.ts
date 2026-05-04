@@ -10,12 +10,12 @@ export type AcpxConfig = {
   sessionTtlHours: number
 }
 
-export type RuntimeEnv = {
+export type WorkerEnv = {
   acpx: AcpxConfig
 
   homeDir: string
   stateDir: string
-  session: string
+  workerName: string
   gatewayHost: string
   gatewayPort: number
   gatewayToken: string
@@ -38,7 +38,7 @@ function intFromEnv(name: string, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-export function getRuntimeEnv(): RuntimeEnv {
+export function getWorkerEnv(): WorkerEnv {
   const homeDir = process.env.HOME ?? process.cwd()
   return {
     acpx: {
@@ -52,7 +52,7 @@ export function getRuntimeEnv(): RuntimeEnv {
 
     homeDir,
     stateDir: process.env.PI_WORKER_STATE_DIR ?? `${homeDir}/.pi-worker`,
-    session: process.env.PI_WORKER_SESSION ?? "theo-pi",
+    workerName: process.env.PI_WORKER_NAME ?? process.env.PI_WORKER_SESSION ?? "theo-pi",
     gatewayHost: process.env.PI_WORKER_GATEWAY_HOST ?? "127.0.0.1",
     gatewayPort: intFromEnv("PI_WORKER_GATEWAY_PORT", 8787),
     gatewayToken: process.env.PI_WORKER_GATEWAY_TOKEN ?? "",

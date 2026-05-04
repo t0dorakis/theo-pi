@@ -1,5 +1,8 @@
 # Pi Worker Backend Architecture Review
 
+> Status: implemented in `feat/acpx-backend`; execution backends were removed and ACPX runtime adapter is canonical.
+
+
 **Date:** 2026-05-04  
 **Branch:** `feat/acpx-backend`  
 **Scope:** Review current pi-worker backend architecture after acpx/smolvm additions.  
@@ -233,7 +236,7 @@ type WorkerRunResult =
   | { status: "done"; answer: string }
   | { status: "failed"; error: string }
 
-async function runAcpxJob(job: WorkerJob, env: RuntimeEnv): Promise<WorkerRunResult>
+async function runAcpxJob(job: WorkerJob, env: WorkerEnv): Promise<WorkerRunResult>
 ```
 
 This is deeper than current `WorkerBackend`: small interface, hides acpx sessions, streaming, retries, and result-channel writes.

@@ -1,7 +1,10 @@
 # PR1: Replace exec subprocess with acpx/runtime in-process API
 
+> Status: merged into `feat/acpx-backend`; ACPX runtime adapter is now the sole execution path.
+
+
 **Branch:** `feat/pr1-acpx-runtime-inline`  
-**Status:** pending  
+**Status:** merged
 **Depends on:** none — foundation PR  
 **Estimated scope:** ~250 LOC changed, ~100 LOC new
 
@@ -210,7 +213,7 @@ export type AcpxConfig = {
 }
 ```
 
-In `getRuntimeEnv()`:
+In `getWorkerEnv()`:
 
 ```ts
 acpx: {
@@ -273,7 +276,7 @@ If acpx uses a non-standard `exports` map, check `node_modules/acpx/package.json
 
 - [ ] `npm install acpx` and verify `acpx/runtime` import resolves
 - [ ] Add `stateDir` and `timeoutMs` to `AcpxConfig` in `env.ts`
-- [ ] Add `ACPX_STATE_DIR` and `ACPX_TIMEOUT_MS` reading in `getRuntimeEnv()`
+- [ ] Add `ACPX_STATE_DIR` and `ACPX_TIMEOUT_MS` reading in `getWorkerEnv()`
 - [ ] Create `scripts/vm/lib/backends/acpx-runtime-backend.ts`
 - [ ] Add `"acpx-runtime"` to `WorkerBackendId` union in `backend.ts`
 - [ ] Wire `"acpx-runtime"` case in `backend-registry.ts`

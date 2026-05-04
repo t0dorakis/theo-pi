@@ -1,7 +1,10 @@
 # PR2: Live streaming AcpRuntimeEvent to Telegram
 
+> Status: deferred; structured ACPX event logs exist, live Telegram streaming is still pending.
+
+
 **Branch:** `feat/pr2-acpx-streaming-telegram`  
-**Status:** pending  
+**Status:** deferred
 **Depends on:** PR1 (`feat/pr1-acpx-runtime-inline`)  
 **Estimated scope:** ~300 LOC new, ~80 LOC changed
 

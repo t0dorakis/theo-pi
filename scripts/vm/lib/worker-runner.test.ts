@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import type { RuntimeEnv } from "./env"
+import type { WorkerEnv } from "./env"
 import { createJobQueue } from "./jobs"
 import { runQueuedJob } from "./worker-runner"
 
@@ -16,7 +16,7 @@ afterEach(async () => {
   }
 })
 
-function makeEnv(stateDir: string, sessionMode: "oneshot" | "persistent" = "persistent"): RuntimeEnv {
+function makeEnv(stateDir: string, sessionMode: "oneshot" | "persistent" = "persistent"): WorkerEnv {
   return {
     acpx: {
       agent: "pi",
@@ -28,7 +28,7 @@ function makeEnv(stateDir: string, sessionMode: "oneshot" | "persistent" = "pers
     },
     homeDir: stateDir,
     stateDir,
-    session: "test",
+    workerName: "test",
     gatewayHost: "127.0.0.1",
     gatewayPort: 8787,
     gatewayToken: "",

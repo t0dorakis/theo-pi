@@ -4,19 +4,19 @@ import { randomUUID } from "node:crypto"
 import { appendFile, mkdir } from "node:fs/promises"
 import { promisify } from "node:util"
 
-import { getRuntimeEnv } from "./lib/env"
+import { getWorkerEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
 import { getScriptDir, localScript } from "./lib/paths"
 import { createStateStore } from "./lib/state-store"
-import { getWorkerRuntimeHealth, requestCancelJobsForChat, resetWorkerChatSession } from "./lib/worker-runner"
+import { getAcpxRuntimeHealth, requestCancelJobsForChat, resetWorkerChatSession } from "./lib/worker-runner"
 
 const execFileAsync = promisify(execFile)
-const env = getRuntimeEnv()
+const env = getWorkerEnv()
 const scriptDir = getScriptDir(import.meta.url)
 const stateStore = createStateStore(env.stateDir)
 const queue = createJobQueue(env.stateDir, { backend: "acpx" })
 
-const session = env.session
+const workerName = env.workerName
 const host = env.gatewayHost
 const port = env.gatewayPort
 const bearerToken = env.gatewayToken
@@ -115,7 +115,7 @@ async function statusJson() {
   if (stored) {
     return stored as JsonRecord
   }
-  const output = await runLocal(localScript(scriptDir, "pi-worker-status"), [session, "--json"])
+  const output = await runLocal(localScript(scriptDir, "pi-worker-status"), [workerName, "--json"])
   return JSON.parse(output) as JsonRecord
 }
 
@@ -182,7 +182,7 @@ async function handleTelegramCommand(message: TelegramMessage) {
   }
 
   if (textValue === "/restart") {
-    const output = await runLocal(localScript(scriptDir, "pi-worker-restart"), [session])
+    const output = await runLocal(localScript(scriptDir, "pi-worker-restart"), [workerName])
     await telegramSendMessage(chatId, output)
     return { ok: true }
   }
@@ -246,8 +246,8 @@ const server = Bun.serve({
     try {
       if (request.method === "GET" && url.pathname === "/health") {
         const status = await statusJson()
-        const backend = await getWorkerRuntimeHealth(env)
-        return json({ ...status, backend })
+        const acpx = await getAcpxRuntimeHealth(env)
+        return json({ ...status, acpx })
       }
 
       if (request.method === "GET" && url.pathname === "/status") {
@@ -290,8 +290,8 @@ const server = Bun.serve({
       }
 
       if (request.method === "POST" && url.pathname === "/restart") {
-        const output = await runLocal(localScript(scriptDir, "pi-worker-restart"), [session])
-        return json({ ok: true, session, message: output })
+        const output = await runLocal(localScript(scriptDir, "pi-worker-restart"), [workerName])
+        return json({ ok: true, workerName, message: output })
       }
 
       if (request.method === "POST" && url.pathname === "/checkpoint") {

@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 VM_NAME="${PI_WORKER_VM_NAME:-pi-worker}"
 VM_REPO_DIR="${PI_WORKER_VM_REPO_DIR:-/home/piagent/workspaces/theo-pi}"
 STATE_DIR="${PI_WORKER_STATE_DIR:-$HOME/.pi-worker}"
-SESSION="${PI_WORKER_SESSION:-theo-pi}"
+SESSION="${PI_WORKER_NAME:-${PI_WORKER_SESSION:-theo-pi}}"
 REMOTE_ARCHIVE="/tmp/pi-worker-instance-sync.tgz"
 
 SMART_SYNC_FILES=(

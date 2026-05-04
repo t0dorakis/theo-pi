@@ -67,7 +67,7 @@ function makeMockRuntime(opts: {
 }
 
 // We mock `acpx/runtime` by intercepting the dynamic import inside the module.
-// Strategy: use Bun's module mock so the persistent backend sees our fake.
+// Strategy: use Bun's module mock so the runtime adapter sees our fake.
 
 function makeMockModule(runtime: ReturnType<typeof makeMockRuntime>) {
   return {
@@ -126,8 +126,8 @@ test("session key is <agent>-<chatId>", async () => {
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "persistent" as const,
@@ -138,7 +138,7 @@ test("session key is <agent>-<chatId>", async () => {
   })
 
   const job = makeJob({ chatId: "123456789" })
-  await backend.submitPrompt(job)
+  await adapter.submitPrompt(job)
 
   expect(runtime.ensureSession).toHaveBeenCalledTimes(1)
   const call = runtime.ensureSession.mock.calls[0][0] as { sessionKey: string; mode: string }
@@ -162,8 +162,8 @@ test("second job for same chatId reuses cached handle (ensureSession called once
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "persistent" as const,
@@ -176,8 +176,8 @@ test("second job for same chatId reuses cached handle (ensureSession called once
   const job1 = makeJob({ chatId: "777" })
   const job2 = makeJob({ chatId: "777" })
 
-  await backend.submitPrompt(job1)
-  await backend.submitPrompt(job2)
+  await adapter.submitPrompt(job1)
+  await adapter.submitPrompt(job2)
 
   // ensureSession called exactly once — second job reuses handle from cache
   expect(runtime.ensureSession).toHaveBeenCalledTimes(1)
@@ -207,8 +207,8 @@ test("on session error, handle evicted from cache and session recreated", async 
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "persistent" as const,
@@ -219,7 +219,7 @@ test("on session error, handle evicted from cache and session recreated", async 
   })
 
   const job = makeJob({ chatId: "888" })
-  await backend.submitPrompt(job)
+  await adapter.submitPrompt(job)
 
   // ensureSession called twice: once for first attempt, once for retry
   expect(runtime.ensureSession).toHaveBeenCalledTimes(2)
@@ -227,7 +227,7 @@ test("on session error, handle evicted from cache and session recreated", async 
   expect(runtime.startTurn).toHaveBeenCalledTimes(2)
 
   // Final result should be "done" from the retry
-  const result = await backend.readResult(job)
+  const result = await adapter.readResult(job)
   expect(result).toBe("retry ok")
 })
 
@@ -242,8 +242,8 @@ test("sessionHealth returns ok from runtime.doctor()", async () => {
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "persistent" as const,
@@ -265,9 +265,9 @@ test("sessionHealth returns ok from runtime.doctor()", async () => {
       closeStream: mock(async () => {}),
     }
   })
-  await backend.submitPrompt(job)
+  await adapter.submitPrompt(job)
 
-  const health = await backend.sessionHealth()
+  const health = await adapter.sessionHealth()
   expect(health.ok).toBe(true)
   expect(health.detail).toBe("healthy")
 })
@@ -282,8 +282,8 @@ test("resetChatSession closes and discards persistent state", async () => {
   const runtime = makeMockRuntime({})
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "persistent" as const,
@@ -293,7 +293,7 @@ test("resetChatSession closes and discards persistent state", async () => {
     sessionTtlHours: 24,
   })
 
-  await backend.resetChatSession("123")
+  await adapter.resetChatSession("123")
 
   expect(runtime.ensureSession).toHaveBeenCalledTimes(1)
   expect(runtime.close).toHaveBeenCalledTimes(1)
@@ -326,8 +326,8 @@ test("cancel calls the stored cancel fn for in-flight turn", async () => {
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "persistent" as const,
@@ -340,12 +340,12 @@ test("cancel calls the stored cancel fn for in-flight turn", async () => {
   const job = makeJob()
 
   // Start the turn but don't await — it hangs.
-  const submitPromise = backend.submitPrompt(job)
+  const submitPromise = adapter.submitPrompt(job)
 
   // Give the event loop a tick to set activeTurns.
   await new Promise<void>((r) => setTimeout(r, 10))
 
-  await backend.cancel(job.id)
+  await adapter.cancel(job.id)
 
   expect(cancelMock).toHaveBeenCalledTimes(1)
 

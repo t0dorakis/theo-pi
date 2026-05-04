@@ -1,5 +1,8 @@
 # Chief Architect Review: acpx PR Series + Architecture Diagram
 
+> Status: partially implemented; current architecture is documented in `docs/architecture.md`.
+
+
 **Date:** 2026-04-21  
 **Reviewer:** Pi (chief architect mode) + claude-code cross-review via `acpx claude exec`  
 **Scope:** PR1–PR6 value/core/leaf assessment + before/after architecture diagram

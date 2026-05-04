@@ -19,8 +19,8 @@ test("request file written and result file discovered", async () => {
   tempDirs.push(root)
   const channel = createResultChannel(root)
 
-  await channel.writeRequest({ id: "job-1", backendId: "tmux", prompt: "pong" })
-  await channel.writeResult({ id: "job-1", backendId: "tmux", status: "done", answer: "pong", completedAt: "2026-04-16T10:00:00Z" })
+  await channel.writeRequest({ id: "job-1", backendId: "acpx", prompt: "pong" })
+  await channel.writeResult({ id: "job-1", backendId: "acpx", status: "done", answer: "pong", completedAt: "2026-04-16T10:00:00Z" })
 
   await expect(channel.readResult("job-1")).resolves.toMatchObject({ answer: "pong", status: "done" })
 })
@@ -30,8 +30,8 @@ test("failed result preserves error text", async () => {
   tempDirs.push(root)
   const channel = createResultChannel(root)
 
-  await channel.writeResult({ id: "job-1", backendId: "tmux", status: "failed", error: "missing or malformed <final_answer> block", completedAt: "2026-04-16T10:00:00Z" })
-  await expect(channel.readResult("job-1")).resolves.toMatchObject({ status: "failed", error: "missing or malformed <final_answer> block" })
+  await channel.writeResult({ id: "job-1", backendId: "acpx", status: "failed", error: "worker turn failed", completedAt: "2026-04-16T10:00:00Z" })
+  await expect(channel.readResult("job-1")).resolves.toMatchObject({ status: "failed", error: "worker turn failed" })
 })
 
 test("malformed result rejected", async () => {

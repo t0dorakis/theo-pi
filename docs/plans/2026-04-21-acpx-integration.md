@@ -1,10 +1,12 @@
 ---
 title: acpx Integration Plan
 date: 2026-04-21
-status: foundation landed
+status: superseded by feat/acpx-backend
 ---
 
 # acpx Integration
+
+> Status: superseded by the ACPX-only runtime adapter documented in `docs/architecture.md` and `docs/CONTEXT.md`. Paths and backend-registry references below are historical.
 
 ## What
 

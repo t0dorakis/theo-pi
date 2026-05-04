@@ -105,7 +105,7 @@ function makeJob(overrides: Partial<WorkerJob> = {}): WorkerJob {
 }
 
 async function makeTmpDir() {
-  return mkdtemp(join(tmpdir(), "acpx-runtime-backend-"))
+  return mkdtemp(join(tmpdir(), "acpx-runtime-adapter-"))
 }
 
 // ---------------------------------------------------------------------------
@@ -128,8 +128,8 @@ test("submitPrompt writes done result with answer text", async () => {
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "oneshot" as const,
@@ -139,9 +139,9 @@ test("submitPrompt writes done result with answer text", async () => {
   })
 
   const job = makeJob()
-  await backend.submitPrompt(job)
+  await adapter.submitPrompt(job)
 
-  const result = await backend.readResult(job)
+  const result = await adapter.readResult(job)
   expect(result).toBe("Hello from Pi")
 
   const eventLog = await readFile(join(stateDir, "jobs", "events", `${job.id}.ndjson`), "utf8")
@@ -156,8 +156,8 @@ test("submitPrompt uses oneshot mode with jobId as sessionKey", async () => {
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "oneshot" as const,
@@ -167,7 +167,7 @@ test("submitPrompt uses oneshot mode with jobId as sessionKey", async () => {
   })
 
   const job = makeJob({ id: "job-abc-123" })
-  await backend.submitPrompt(job)
+  await adapter.submitPrompt(job)
 
   expect(runtime.ensureSession).toHaveBeenCalledTimes(1)
   const call = runtime.ensureSession.mock.calls[0][0] as { sessionKey: string; mode: string }
@@ -187,8 +187,8 @@ test("submitPrompt writes failed result when turn fails", async () => {
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "oneshot" as const,
@@ -198,9 +198,9 @@ test("submitPrompt writes failed result when turn fails", async () => {
   })
 
   const job = makeJob()
-  await backend.submitPrompt(job)
+  await adapter.submitPrompt(job)
 
-  await expect(backend.readResult(job)).rejects.toThrow()
+  await expect(adapter.readResult(job)).rejects.toThrow()
 
   const channel = createResultChannel(stateDir)
   const stored = await channel.readResult(job.id)
@@ -220,8 +220,8 @@ test("submitPrompt writes failed result when turn is cancelled", async () => {
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "oneshot" as const,
@@ -231,9 +231,9 @@ test("submitPrompt writes failed result when turn is cancelled", async () => {
   })
 
   const job = makeJob()
-  await backend.submitPrompt(job)
+  await adapter.submitPrompt(job)
 
-  await expect(backend.readResult(job)).rejects.toThrow("worker cancel")
+  await expect(adapter.readResult(job)).rejects.toThrow("worker cancel")
 })
 
 test("thought stream deltas are excluded from answer", async () => {
@@ -252,8 +252,8 @@ test("thought stream deltas are excluded from answer", async () => {
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "oneshot" as const,
@@ -263,9 +263,9 @@ test("thought stream deltas are excluded from answer", async () => {
   })
 
   const job = makeJob()
-  await backend.submitPrompt(job)
+  await adapter.submitPrompt(job)
 
-  const result = await backend.readResult(job)
+  const result = await adapter.readResult(job)
   expect(result).toBe("actual answer")
   expect(result).not.toContain("thinking")
 })
@@ -275,8 +275,8 @@ test("readResult returns null when result file absent", async () => {
 
   mock.module("acpx/runtime", () => makeMockModule(makeMockRuntime({})))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "oneshot" as const,
@@ -287,7 +287,7 @@ test("readResult returns null when result file absent", async () => {
 
   const job = makeJob()
   // No submitPrompt — file absent
-  const result = await backend.readResult(job)
+  const result = await adapter.readResult(job)
   expect(result).toBeNull()
 })
 
@@ -309,8 +309,8 @@ test("cancel calls turn cancel fn", async () => {
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "oneshot" as const,
@@ -320,11 +320,11 @@ test("cancel calls turn cancel fn", async () => {
   })
 
   const job = makeJob()
-  const submitPromise = backend.submitPrompt(job)
+  const submitPromise = adapter.submitPrompt(job)
 
   await new Promise<void>((r) => setTimeout(r, 10))
 
-  await backend.cancel(job.id)
+  await adapter.cancel(job.id)
   expect(cancelMock).toHaveBeenCalledTimes(1)
 
   submitPromise.catch(() => {})
@@ -337,8 +337,8 @@ test("sessionHealth returns ok from runtime.doctor()", async () => {
 
   mock.module("acpx/runtime", () => makeMockModule(runtime))
 
-  const { createAcpxBackend } = await import("./acpx-backend")
-  const backend = createAcpxBackend({
+  const { createAcpxRuntimeAdapter } = await import("./runtime-adapter")
+  const adapter = createAcpxRuntimeAdapter({
     stateDir,
     acpxStateDir: stateDir,
     sessionMode: "oneshot" as const,
@@ -348,9 +348,9 @@ test("sessionHealth returns ok from runtime.doctor()", async () => {
   })
 
   // Trigger lazy runtime init.
-  await backend.submitPrompt(makeJob())
+  await adapter.submitPrompt(makeJob())
 
-  const health = await backend.sessionHealth()
+  const health = await adapter.sessionHealth()
   expect(health.ok).toBe(true)
   expect(health.detail).toBe("all good")
 })

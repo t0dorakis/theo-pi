@@ -14,7 +14,7 @@ Suggested health payload:
 {
   "ok": true,
   "daemonStatus": "running",
-  "sessionName": "theo-pi",
+  "workerName": "theo-pi",
   "workspacePath": "/home/piagent/workspaces/theo-pi",
   "pid": 12345,
   "restartCount": 1,
@@ -40,7 +40,7 @@ Allowed initial values:
 - `failed`
 - `stale`
 
-### `sessionName`
+### `workerName`
 Named `tmux` or runtime session currently associated with this worker context.
 
 ### `workspacePath`

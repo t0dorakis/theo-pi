@@ -1,7 +1,10 @@
 # PR3: Adopt FlowRunStore bundle format for all jobs
 
+> Status: deferred; current branch writes per-job request/result/event artifacts, not run bundles.
+
+
 **Branch:** `feat/pr3-acpx-run-bundles`  
-**Status:** pending  
+**Status:** deferred
 **Depends on:** PR1 (`feat/pr1-acpx-runtime-inline`)  
 **Estimated scope:** ~400 LOC new, ~120 LOC changed
 

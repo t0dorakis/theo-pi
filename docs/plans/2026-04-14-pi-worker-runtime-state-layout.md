@@ -46,8 +46,8 @@ Suggested fields:
 ```json
 {
   "runtimeVersion": "v1",
-  "activeSessionName": "theo-pi",
-  "activeWorkspacePath": "/home/piagent/workspaces/theo-pi",
+  "workerName": "theo-pi",
+  "workspacePath": "/home/piagent/workspaces/theo-pi",
   "piPid": 12345,
   "supervisorPid": 12300,
   "daemonStatus": "running",
@@ -70,7 +70,7 @@ Suggested fields:
 
 ```json
 {
-  "sessionName": "theo-pi",
+  "workerName": "theo-pi",
   "workspacePath": "/home/piagent/workspaces/theo-pi",
   "lastHeartbeatAt": "2026-04-14T12:11:35Z",
   "lastSuccessAt": "2026-04-14T12:10:54Z"
@@ -92,7 +92,7 @@ Suggested fields:
 {
   "ok": true,
   "daemonStatus": "running",
-  "sessionName": "theo-pi",
+  "workerName": "theo-pi",
   "workspacePath": "/home/piagent/workspaces/theo-pi",
   "pid": 12345,
   "restartCount": 1,

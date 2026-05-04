@@ -1,7 +1,10 @@
 # PR4: Persistent ACP sessions per Telegram chat — multi-turn context
 
+> Status: merged into `feat/acpx-backend`; persistent sessions are keyed by `${agent}-${chatId}`.
+
+
 **Branch:** `feat/pr4-acpx-persistent-sessions`  
-**Status:** pending  
+**Status:** merged
 **Depends on:** PR1 (`feat/pr1-acpx-runtime-inline`)  
 **Estimated scope:** ~350 LOC new, ~100 LOC changed
 
@@ -309,7 +312,7 @@ New file: `scripts/vm/pi-worker-session-cleanup.ts`
 // Run periodically (e.g. hourly via cron or supervised loop).
 // Closes persistent ACP sessions that have been idle for > ACPX_SESSION_TTL_HOURS.
 
-const env = getRuntimeEnv()
+const env = getWorkerEnv()
 const sessionDir = join(env.acpx.stateDir, "sessions")
 const ttlMs = env.acpx.sessionTtlHours * 3600 * 1000
 

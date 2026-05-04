@@ -230,7 +230,7 @@ git commit -m "docs: specify pi worker supervisor behavior"
 Document health output fields such as:
 - `ok`
 - `daemonStatus`
-- `sessionName`
+- `workerName`
 - `workspacePath`
 - `pid`
 - `restartCount`

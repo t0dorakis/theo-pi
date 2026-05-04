@@ -134,19 +134,20 @@ For Theo's local Linux VM worker setup, repo includes:
 - `scripts/vm/pi-worker-verify-runtime` — compatibility wrapper for `pi-worker-supervisor verify`
 - `scripts/vm/pi-worker-fail-inject` — helper for runtime failure injection (`kill`, `stale`, `break-workspace`, `restore-workspace`)
 - `scripts/vm/pi-worker-runtime-checklist` — run supervised-runtime verification checks against a real session
-- `scripts/vm/pi-worker-gateway` / `pi-worker-gateway.ts` — Bun HTTP gateway; `/run` enqueues queue jobs instead of delegating directly to tmux
-- `scripts/vm/pi-worker-telegram-bot` / `pi-worker-telegram-bot.ts` — Bun long-poll Telegram bot; plain text runs prompts through queue + acpx backend, then returns final answer
-- `scripts/vm/pi-worker-submit-job` / `pi-worker-run-job` — file-backed job queue + acpx runner under `~/.pi-worker/telegram/jobs`
+- `scripts/vm/pi-worker-gateway` / `pi-worker-gateway.ts` — Bun HTTP gateway; `/run` enqueues non-Telegram queue jobs
+- `scripts/vm/pi-worker-telegram-bot` / `pi-worker-telegram-bot.ts` — Bun long-poll Telegram bot; text commands enqueue numeric-chat jobs, then deliver final answers
+- `scripts/vm/pi-worker-submit-job` / `pi-worker-run-job` — file-backed job queue + ACPX runtime adapter under `~/.pi-worker/telegram/jobs`
 - `scripts/vm/pi-worker-verify.sh` — verify guest worker prerequisites/config
 - `scripts/vm/pi-worker-supervisor-smoke-test` — temp-HOME smoke test for supervisor start/status/kill/restart/stop behavior
 - `scripts/vm/pi-worker-gateway-smoke-test` — temp-HOME smoke test for Bun gateway queue endpoints
-- `scripts/vm/pi-worker-acpx-smoke-test` — repeatable real acpx smoke: enqueue job, run it, assert queue/result/session state
+- `scripts/vm/pi-worker-acpx-smoke-test` — repeatable real acpx smoke: enqueue job, run it, assert queue/result/ACP session state
 - `templates/pi-worker/` — starter `settings.json`, `.env`, and SSH hardening snippets
 
 ACPX worker quick start:
 
 ```bash
-npm install -g acpx@0.6.1
+npm install
+npm install -g acpx@0.6.1 # optional CLI convenience; runtime imports local package
 export ACPX_AGENT=pi
 export ACPX_SESSION_MODE=persistent
 export ACPX_CWD="$PWD"
