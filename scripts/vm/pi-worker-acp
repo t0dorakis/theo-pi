@@ -70,7 +70,9 @@ run_prompt() {
   orbctl push -m "$VM_NAME" "$local_prompt" "$remote_prompt" >/dev/null
   rm -f "$local_prompt"
 
-  run_vm "set -euo pipefail
+  local remote_output
+  set +e
+  remote_output=$(run_vm "set -euo pipefail
     cd '$VM_REPO_DIR'
     export PATH=\"\$HOME/bin:\$HOME/.bun/bin:\$PATH\"
     export THEO_PI_GATEWAY_URL=http://127.0.0.1:8787
@@ -120,8 +122,14 @@ PY_EPOCH
       [ -z \"\$job_id\" ] || echo \"cancel: pi-worker-acp cancel \$job_id\"
       exit 1
     fi
-    exit \$code
-  "
+    exit 0
+  ")
+  set -e
+  printf '%s\n' "$remote_output"
+  if printf '%s\n' "$remote_output" | grep -qx 'status: done'; then
+    return 0
+  fi
+  return 1
 }
 
 result_cmd() {
