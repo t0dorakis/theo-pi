@@ -3,7 +3,7 @@ import { getRuntimeEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
 
 const env = getRuntimeEnv()
-const queue = createJobQueue(env.stateDir)
+const queue = createJobQueue(env.stateDir, { backend: "acpx" })
 
 const [chatId, ...promptParts] = process.argv.slice(2)
 const prompt = promptParts.join(" ").trim()

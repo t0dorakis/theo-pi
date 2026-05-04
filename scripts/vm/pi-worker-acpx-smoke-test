@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SUBMIT_JOB="$SCRIPT_DIR/pi-worker-submit-job"
+RUN_JOB="$SCRIPT_DIR/pi-worker-run-job"
+
+pass() { printf '[pass] %s\n' "$1"; }
+fail() { printf '[fail] %s\n' "$1"; exit 1; }
+
+export PATH="$HOME/bin:$HOME/.bun/bin:$PATH"
+if [[ -f "$HOME/.env.pi" ]]; then
+  # shellcheck disable=SC1090
+  source "$HOME/.env.pi"
+fi
+
+# Placeholder keys break Pi subscription auth. Remove them for smoke run.
+unset OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY
+
+export ACPX_SESSION_MODE="persistent"
+
+CHAT_ID="${1:-smoke-acpx}"
+PROMPT_ONE='Reply with exactly one character: 4'
+PROMPT_TWO='Reply with exactly two characters: ok'
+SESSION_FILE="${ACPX_STATE_DIR:-$HOME/.pi-worker/acp}/sessions/${ACPX_AGENT:-pi}-${CHAT_ID}.json"
+
+submit_and_run() {
+  local chat_id="$1"
+  local prompt="$2"
+  local timeout_seconds="${3:-60}"
+  local job_json job_id result_json
+
+  job_json="$(PI_WORKER_JOB_TIMEOUT_SECONDS="$timeout_seconds" "$SUBMIT_JOB" "$chat_id" "$prompt")"
+  job_id="$(printf '%s' "$job_json" | jq -r '.id')"
+  [[ -n "$job_id" && "$job_id" != "null" ]] || fail "job id created"
+
+  PI_WORKER_JOB_TIMEOUT_SECONDS="$timeout_seconds" "$RUN_JOB" "$job_id" >/dev/null
+
+  result_json="$HOME/.pi-worker/jobs/results/${job_id}.json"
+  [[ -f "$result_json" ]] || fail "result file exists for $job_id"
+  printf '%s\n' "$job_id"
+}
+
+JOB_ONE="$(submit_and_run "$CHAT_ID" "$PROMPT_ONE")"
+ANSWER_ONE="$(jq -r '.answer' "$HOME/.pi-worker/jobs/results/${JOB_ONE}.json")"
+[[ "$ANSWER_ONE" == "4" ]] || fail "first answer equals 4"
+pass "first acpx job completed"
+
+[[ -f "$SESSION_FILE" ]] || fail "persistent session file created"
+pass "persistent session file created"
+
+JOB_TWO="$(submit_and_run "$CHAT_ID" "$PROMPT_TWO")"
+ANSWER_TWO="$(jq -r '.answer' "$HOME/.pi-worker/jobs/results/${JOB_TWO}.json")"
+[[ "$ANSWER_TWO" == "ok" ]] || fail "second answer equals ok"
+pass "second acpx job completed"
+
+[[ -f "$SESSION_FILE" ]] || fail "persistent session file still present"
+pass "persistent session reused for same chat"
+
+JOB_ONE_STATE="$HOME/.pi-worker/telegram/jobs/${JOB_ONE}.json"
+JOB_TWO_STATE="$HOME/.pi-worker/telegram/jobs/${JOB_TWO}.json"
+jq -e '.status == "done" and (.answer | length > 0) and .backend == "acpx"' "$JOB_ONE_STATE" >/dev/null || fail "first queue job marked done"
+jq -e '.status == "done" and (.answer | length > 0) and .backend == "acpx"' "$JOB_TWO_STATE" >/dev/null || fail "second queue job marked done"
+pass "queue lifecycle stored as done"
+
+printf '[pass] acpx smoke completed: %s %s\n' "$JOB_ONE" "$JOB_TWO"

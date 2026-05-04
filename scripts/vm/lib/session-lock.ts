@@ -1,7 +1,7 @@
 // Per-key file lock for atomic check-and-create of ACP sessions.
 // Uses O_EXCL atomic file creation — no race between concurrent first messages.
 
-import { open, unlink, mkdir } from "node:fs/promises"
+import { open, readFile, unlink, mkdir } from "node:fs/promises"
 import { join, dirname } from "node:path"
 
 /**
@@ -37,6 +37,16 @@ export async function acquireSessionLock(
       }
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
+      const pidText = await readFile(lockPath, "utf8").catch(() => "")
+      const pid = Number.parseInt(pidText, 10)
+      if (Number.isFinite(pid)) {
+        try {
+          process.kill(pid, 0)
+        } catch {
+          await unlink(lockPath).catch(() => {})
+          continue
+        }
+      }
       await new Promise<void>((r) => setTimeout(r, 50))
     }
   }

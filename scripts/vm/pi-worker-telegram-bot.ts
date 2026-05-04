@@ -7,12 +7,13 @@ import { getRuntimeEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
 import { getScriptDir, localScript } from "./lib/paths"
 import { createStateStore } from "./lib/state-store"
+import { requestCancelJobsForChat, resetWorkerChatSession } from "./lib/worker-runner"
 
 const execFileAsync = promisify(execFile)
 const env = getRuntimeEnv()
 const scriptDir = getScriptDir(import.meta.url)
 const stateStore = createStateStore(env.stateDir)
-const queue = createJobQueue(env.stateDir)
+const queue = createJobQueue(env.stateDir, { backend: "acpx" })
 
 const token = env.telegramBotToken
 const allowedChatIds = env.telegramAllowedChatIds
@@ -44,6 +45,7 @@ const helpText = [
   "plain text - run prompt and return final answer",
   "/run <prompt> - same as plain text",
   "/status - show worker health JSON",
+  "/reset - reset persistent acpx session for this chat",
   "/restart - restart supervised session",
   "/logs - tail supervisor logs",
   "/checkpoint [label] - create checkpoint metadata",
@@ -160,6 +162,13 @@ async function handleMessage(message: TelegramMessage) {
       return
     }
 
+    if (textValue === "/reset") {
+      const cancelled = await requestCancelJobsForChat(String(chatId), env)
+      await resetWorkerChatSession(String(chatId), env)
+      await sendMessage(chatId, `reset persistent acpx session${cancelled.length > 0 ? `; cancel requested for ${cancelled.length} running job(s)` : ""}`)
+      return
+    }
+
     if (textValue === "/restart") {
       const output = await runLocal(localScript(scriptDir, "pi-worker-restart"), [session])
       await sendMessage(chatId, output)
@@ -203,6 +212,7 @@ async function drainQueue() {
 
       for (const job of jobs) {
         if (job.telegramDeliveredAt) continue
+        if (!/^\d+$/.test(job.chatId)) continue
         if (job.status === "done" && job.answer) {
           await sendMessage(Number(job.chatId), job.answer)
           await queue.markDelivered(job.id)

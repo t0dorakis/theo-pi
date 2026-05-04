@@ -6,6 +6,9 @@ SUPERVISOR="$SCRIPT_DIR/pi-worker-supervisor"
 
 pass() { printf '[pass] %s\n' "$1"; }
 fail() { printf '[fail] %s\n' "$1"; exit 1; }
+skip() { printf '[skip] %s\n' "$1"; exit 0; }
+
+command -v tmux >/dev/null 2>&1 || skip 'tmux missing; supervisor smoke skipped'
 
 TMPDIR_ROOT="$(mktemp -d)"
 trap 'tmux kill-session -t smoke-demo >/dev/null 2>&1 || true; rm -rf "$TMPDIR_ROOT"' EXIT

@@ -1,16 +1,20 @@
 #!/usr/bin/env bun
 import { execFile } from "node:child_process"
+import { randomUUID } from "node:crypto"
+import { appendFile, mkdir } from "node:fs/promises"
 import { promisify } from "node:util"
 
-import { createTmuxBackend } from "./lib/backends/tmux-backend"
 import { getRuntimeEnv } from "./lib/env"
+import { createJobQueue } from "./lib/jobs"
 import { getScriptDir, localScript } from "./lib/paths"
 import { createStateStore } from "./lib/state-store"
+import { getWorkerRuntimeHealth, requestCancelJobsForChat, resetWorkerChatSession } from "./lib/worker-runner"
 
 const execFileAsync = promisify(execFile)
 const env = getRuntimeEnv()
 const scriptDir = getScriptDir(import.meta.url)
 const stateStore = createStateStore(env.stateDir)
+const queue = createJobQueue(env.stateDir, { backend: "acpx" })
 
 const session = env.session
 const host = env.gatewayHost
@@ -20,11 +24,8 @@ const telegramWebhookSecret = env.telegramWebhookSecret
 const telegramToken = env.telegramBotToken
 const telegramAllowedChats = env.telegramAllowedChatIds
 const logsLines = env.telegramLogLines
-const backend = createTmuxBackend({
-  session,
-  delegateScript: localScript(scriptDir, "pi-worker-delegate"),
-  runLocal,
-})
+const runnerLogPath = `${env.stateDir}/jobs/runner.log`
+let queueWorkerActive = false
 
 type JsonRecord = Record<string, unknown>
 type TelegramMessage = {
@@ -71,6 +72,44 @@ async function runLocal(command: string, args: string[] = []) {
   return `${stdout}${stderr}`.trim()
 }
 
+async function appendRunnerLog(jobId: string, message: string) {
+  await mkdir(`${env.stateDir}/jobs`, { recursive: true })
+  await appendFile(runnerLogPath, `[${new Date().toISOString()}] [${jobId}] ${message}\n`).catch(() => {})
+}
+
+async function runJobProcess(jobId: string) {
+  try {
+    const { stdout, stderr } = await execFileAsync(localScript(scriptDir, "pi-worker-run-job"), [jobId], {
+      env: process.env,
+      maxBuffer: 1024 * 1024 * 4,
+    })
+    const output = `${stdout}${stderr}`.trim()
+    if (output) await appendRunnerLog(jobId, output)
+  } catch (error) {
+    const detail = error as Error & { stdout?: string; stderr?: string; code?: number | string }
+    await appendRunnerLog(
+      jobId,
+      `runner failed${detail.code != null ? ` code=${String(detail.code)}` : ""}: ${detail.message}\n${detail.stdout ?? ""}${detail.stderr ?? ""}`.trim(),
+    )
+  }
+}
+
+async function drainQueue() {
+  if (queueWorkerActive) return
+  queueWorkerActive = true
+  try {
+    while (true) {
+      await queue.reapExpiredLeases()
+      const jobs = await queue.listJobs()
+      const nextPending = jobs.find((job) => job.status === "pending" && !job.telegramDeliveredAt && !/^\d+$/.test(job.chatId))
+      if (!nextPending) break
+      await runJobProcess(nextPending.id)
+    }
+  } finally {
+    queueWorkerActive = false
+  }
+}
+
 async function statusJson() {
   const stored = await stateStore.readHealth()
   if (stored) {
@@ -78,6 +117,12 @@ async function statusJson() {
   }
   const output = await runLocal(localScript(scriptDir, "pi-worker-status"), [session, "--json"])
   return JSON.parse(output) as JsonRecord
+}
+
+async function enqueuePrompt(chatId: string, prompt: string) {
+  const job = await queue.enqueueJob({ chatId, prompt })
+  if (env.gatewayDrain) void drainQueue()
+  return job
 }
 
 async function telegramApi(method: string, body: JsonRecord) {
@@ -126,7 +171,7 @@ async function handleTelegramCommand(message: TelegramMessage) {
   if (textValue === "/help" || textValue === "/start") {
     await telegramSendMessage(
       chatId,
-      ["Pi worker gateway commands:", "/run <prompt>", "/status", "/restart", "/logs", "/checkpoint [label]"].join("\n"),
+      ["Pi worker gateway commands:", "/run <prompt>", "/reset", "/status", "/restart", "/logs", "/checkpoint [label]"].join("\n"),
     )
     return { ok: true }
   }
@@ -155,14 +200,21 @@ async function handleTelegramCommand(message: TelegramMessage) {
     return { ok: true }
   }
 
+  if (textValue === "/reset") {
+    const cancelled = await requestCancelJobsForChat(String(chatId), env)
+    await resetWorkerChatSession(String(chatId), env)
+    await telegramSendMessage(chatId, `reset persistent acpx session${cancelled.length > 0 ? `; cancel requested for ${cancelled.length} running job(s)` : ""}`)
+    return { ok: true }
+  }
+
   if (textValue.startsWith("/run ")) {
     const prompt = textValue.slice(5).trim()
     if (!prompt) {
       await telegramSendMessage(chatId, "usage: /run <prompt>")
       return { ok: true }
     }
-    const output = await runLocal(localScript(scriptDir, "pi-worker-delegate"), [session, prompt])
-    await telegramSendMessage(chatId, `${output}\n\nPrompt queued for ${session}.`)
+    const job = await enqueuePrompt(String(chatId), prompt)
+    await telegramSendMessage(chatId, `queued job ${job.id}`)
     return { ok: true }
   }
 
@@ -174,6 +226,8 @@ if (!bearerToken) {
   console.error("Missing PI_WORKER_GATEWAY_TOKEN")
   process.exit(1)
 }
+
+if (env.gatewayDrain) void drainQueue()
 
 const server = Bun.serve({
   hostname: host,
@@ -192,8 +246,8 @@ const server = Bun.serve({
     try {
       if (request.method === "GET" && url.pathname === "/health") {
         const status = await statusJson()
-        const backendHealth = await backend.sessionHealth()
-        return json({ ...status, backend: backendHealth })
+        const backend = await getWorkerRuntimeHealth(env)
+        return json({ ...status, backend })
       }
 
       if (request.method === "GET" && url.pathname === "/status") {
@@ -203,11 +257,36 @@ const server = Bun.serve({
       if (request.method === "POST" && url.pathname === "/run") {
         const body = (await request.json()) as JsonRecord
         const prompt = String(body.prompt ?? "").trim()
+        const requestedChatId = String(body.chatId ?? "").trim()
+        if (/^\d+$/.test(requestedChatId)) {
+          return json({ ok: false, error: "numeric chatId is reserved for Telegram jobs" }, { status: 400 })
+        }
+        const chatId = requestedChatId || `gateway-${randomUUID()}`
         if (!prompt) {
           return json({ ok: false, error: "missing prompt" }, { status: 400 })
         }
-        const output = await runLocal(localScript(scriptDir, "pi-worker-delegate"), [session, prompt])
-        return json({ ok: true, session, message: output })
+        const job = await enqueuePrompt(chatId, prompt)
+        return json({ ok: true, status: "queued", id: job.id, chatId: job.chatId })
+      }
+
+      if (request.method === "GET" && url.pathname.startsWith("/jobs/")) {
+        const jobId = url.pathname.slice("/jobs/".length)
+        const job = await queue.getJob(jobId)
+        if (!job) {
+          return json({ ok: false, error: "job not found" }, { status: 404 })
+        }
+        return json({ ok: true, job })
+      }
+
+      if (request.method === "POST" && url.pathname === "/reset") {
+        const body = ((await request.json().catch(() => ({}))) ?? {}) as JsonRecord
+        const chatId = String(body.chatId ?? "").trim()
+        if (!chatId) {
+          return json({ ok: false, error: "missing chatId" }, { status: 400 })
+        }
+        const cancelled = await requestCancelJobsForChat(chatId, env)
+        await resetWorkerChatSession(chatId, env)
+        return json({ ok: true, status: "reset", chatId, cancelled })
       }
 
       if (request.method === "POST" && url.pathname === "/restart") {

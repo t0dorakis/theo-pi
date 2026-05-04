@@ -1,5 +1,3 @@
-import type { WorkerBackendId } from "./backend"
-
 export type AcpxConfig = {
   agent: string
   sessionMode: "oneshot" | "persistent"
@@ -12,31 +10,8 @@ export type AcpxConfig = {
   sessionTtlHours: number
 }
 
-export type SmolVmConfig = {
-  cliPath: string
-  vmName: string
-  sshKeyPath: string
-  backend: string
-  memoryMib: number
-  diskSizeMib: number
-  guestWorkdir: string
-  guestPiDir: string
-  hostPiAuthPath: string
-  hostPiSettingsPath: string
-  guestProvider: string
-  guestModel: string
-}
-
-export type TmuxConfig = {
-  /** Override path for the pi-worker-delegate script. */
-  delegateScript: string | undefined
-}
-
 export type RuntimeEnv = {
-  backend: WorkerBackendId
-  tmux: TmuxConfig
   acpx: AcpxConfig
-  smolvm: SmolVmConfig
 
   homeDir: string
   stateDir: string
@@ -44,6 +19,7 @@ export type RuntimeEnv = {
   gatewayHost: string
   gatewayPort: number
   gatewayToken: string
+  gatewayDrain: boolean
   telegramWebhookSecret: string
   telegramBotToken: string
   telegramAllowedChatIds: Set<string>
@@ -65,12 +41,6 @@ function intFromEnv(name: string, fallback: number) {
 export function getRuntimeEnv(): RuntimeEnv {
   const homeDir = process.env.HOME ?? process.cwd()
   return {
-    backend: (process.env.PI_WORKER_BACKEND ?? "tmux") as WorkerBackendId,
-
-    tmux: {
-      delegateScript: process.env.PI_WORKER_DELEGATE_SCRIPT || undefined,
-    },
-
     acpx: {
       agent: process.env.ACPX_AGENT ?? "pi",
       sessionMode: (process.env.ACPX_SESSION_MODE === "persistent" ? "persistent" : "oneshot") as "oneshot" | "persistent",
@@ -80,27 +50,13 @@ export function getRuntimeEnv(): RuntimeEnv {
       sessionTtlHours: intFromEnv("ACPX_SESSION_TTL_HOURS", 24),
     },
 
-    smolvm: {
-      cliPath: process.env.SMOLVM_CLI_PATH ?? "smolvm",
-      vmName: process.env.SMOLVM_VM_NAME ?? "",
-      sshKeyPath: process.env.SMOLVM_SSH_KEY_PATH ?? "",
-      backend: process.env.SMOLVM_BACKEND ?? "apple",
-      memoryMib: intFromEnv("SMOLVM_MEMORY_MIB", 4096),
-      diskSizeMib: intFromEnv("SMOLVM_DISK_SIZE_MIB", 20480),
-      guestWorkdir: process.env.SMOLVM_GUEST_WORKDIR ?? "/root/jobs",
-      guestPiDir: process.env.SMOLVM_GUEST_PI_DIR ?? "",
-      hostPiAuthPath: process.env.SMOLVM_HOST_PI_AUTH_PATH ?? `${homeDir}/.pi/auth.json`,
-      hostPiSettingsPath: process.env.SMOLVM_HOST_PI_SETTINGS_PATH ?? "",
-      guestProvider: process.env.SMOLVM_GUEST_PROVIDER ?? "",
-      guestModel: process.env.SMOLVM_GUEST_MODEL ?? "",
-    },
-
     homeDir,
     stateDir: process.env.PI_WORKER_STATE_DIR ?? `${homeDir}/.pi-worker`,
     session: process.env.PI_WORKER_SESSION ?? "theo-pi",
     gatewayHost: process.env.PI_WORKER_GATEWAY_HOST ?? "127.0.0.1",
     gatewayPort: intFromEnv("PI_WORKER_GATEWAY_PORT", 8787),
     gatewayToken: process.env.PI_WORKER_GATEWAY_TOKEN ?? "",
+    gatewayDrain: process.env.PI_WORKER_GATEWAY_DRAIN !== "0",
     telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET ?? "",
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
     telegramAllowedChatIds: new Set(

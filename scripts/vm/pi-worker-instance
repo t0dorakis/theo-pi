@@ -3,9 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-VM_NAME="${PI_WORKER_VM_NAME:-theo-pi}"
-VM_REPO_DIR="${PI_WORKER_VM_REPO_DIR:-$HOME/workspaces/theo-pi}"
-STATE_DIR='${PI_WORKER_STATE_DIR:-$HOME/.pi-worker}'
+VM_NAME="${PI_WORKER_VM_NAME:-pi-worker}"
+VM_REPO_DIR="${PI_WORKER_VM_REPO_DIR:-/home/piagent/workspaces/theo-pi}"
+STATE_DIR="${PI_WORKER_STATE_DIR:-$HOME/.pi-worker}"
 SESSION="${PI_WORKER_SESSION:-theo-pi}"
 REMOTE_ARCHIVE="/tmp/pi-worker-instance-sync.tgz"
 
@@ -19,6 +19,7 @@ SMART_SYNC_FILES=(
   "scripts/vm/pi-worker-telegram-bot"
   "scripts/vm/pi-worker-run-job"
   "scripts/vm/pi-worker-submit-job"
+  "scripts/vm/pi-worker-acpx-smoke-test"
   "scripts/vm/pi-worker-instance"
 )
 
@@ -30,6 +31,7 @@ usage:
   pi-worker-instance logs [gateway|bot|supervisor|worker]
   pi-worker-instance sync [paths...] [--restart target]
   pi-worker-instance clean-stuck
+  pi-worker-instance smoke-acpx [chat-id]
 EOF
 }
 
@@ -46,10 +48,10 @@ restart_target() {
   local target="${1:-all}"
   case "$target" in
     gateway)
-      run_vm "tmux kill-session -t theo-pi-gateway >/dev/null 2>&1 || true; cd ~/workspaces/theo-pi && tmux new-session -d -s theo-pi-gateway 'source ~/.env.pi 2>/dev/null || true; ~/bin/pi-worker-gateway'"
+      run_vm "tmux kill-session -t theo-pi-gateway >/dev/null 2>&1 || true; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-gateway 'source ~/.env.pi 2>/dev/null || true; ~/bin/pi-worker-gateway'"
       ;;
     bot)
-      run_vm "tmux kill-session -t theo-pi-telegram-bot >/dev/null 2>&1 || true; cd ~/workspaces/theo-pi && tmux new-session -d -s theo-pi-telegram-bot 'source ~/.env.pi 2>/dev/null || true; ~/bin/pi-worker-telegram-bot'"
+      run_vm "tmux kill-session -t theo-pi-telegram-bot >/dev/null 2>&1 || true; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-telegram-bot 'source ~/.env.pi 2>/dev/null || true; ~/bin/pi-worker-telegram-bot'"
       ;;
     supervisor)
       run_vm "~/bin/pi-worker-restart '$SESSION'"
@@ -132,7 +134,7 @@ sync_cmd() {
   local archive="/tmp/pi-worker-instance-sync.tgz"
   (cd "$ROOT_DIR" && tar -czf "$archive" "${existing[@]}")
   orbctl push -m "$VM_NAME" "$archive" "$REMOTE_ARCHIVE" >/dev/null
-  run_vm "cd ~/workspaces/theo-pi && tar -xzf '$REMOTE_ARCHIVE'"
+  run_vm "cd '$VM_REPO_DIR' && tar -xzf '$REMOTE_ARCHIVE'"
 
   if [[ -n "$restart_after" ]]; then
     restart_target "$restart_after"
@@ -173,6 +175,11 @@ PY
   '
 }
 
+smoke_acpx_cmd() {
+  local chat_id="${1:-smoke-acpx}"
+  run_vm "export PATH=\"\$HOME/bin:\$HOME/.bun/bin:\$PATH\"; cd '$VM_REPO_DIR'; bash '$VM_REPO_DIR/scripts/vm/pi-worker-acpx-smoke-test' '$chat_id'"
+}
+
 cmd="${1:-}"
 shift || true
 case "$cmd" in
@@ -181,5 +188,6 @@ case "$cmd" in
   logs) logs_cmd "${1:-gateway}" ;;
   sync) sync_cmd "$@" ;;
   clean-stuck) clean_stuck_cmd ;;
+  smoke-acpx) smoke_acpx_cmd "$@" ;;
   *) usage; exit 1 ;;
 esac

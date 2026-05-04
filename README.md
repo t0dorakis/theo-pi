@@ -134,14 +134,32 @@ For Theo's local Linux VM worker setup, repo includes:
 - `scripts/vm/pi-worker-verify-runtime` — compatibility wrapper for `pi-worker-supervisor verify`
 - `scripts/vm/pi-worker-fail-inject` — helper for runtime failure injection (`kill`, `stale`, `break-workspace`, `restore-workspace`)
 - `scripts/vm/pi-worker-runtime-checklist` — run supervised-runtime verification checks against a real session
-- `scripts/vm/pi-worker-delegate` — send a prompt into a live tmux-backed Pi session
-- `scripts/vm/pi-worker-gateway` / `pi-worker-gateway.ts` — Bun HTTP gateway with mandatory bearer auth for control endpoints, plus Telegram webhook support guarded by secret header validation
-- `scripts/vm/pi-worker-telegram-bot` / `pi-worker-telegram-bot.ts` — Bun long-poll Telegram bot; plain text runs prompts, shows typing status, and returns final Pi answer; control commands stay available
-- `scripts/vm/pi-worker-submit-job` / `pi-worker-run-job` — file-backed Telegram job queue + answer relay helpers under `~/.pi-worker/telegram/jobs`
+- `scripts/vm/pi-worker-gateway` / `pi-worker-gateway.ts` — Bun HTTP gateway; `/run` enqueues queue jobs instead of delegating directly to tmux
+- `scripts/vm/pi-worker-telegram-bot` / `pi-worker-telegram-bot.ts` — Bun long-poll Telegram bot; plain text runs prompts through queue + acpx backend, then returns final answer
+- `scripts/vm/pi-worker-submit-job` / `pi-worker-run-job` — file-backed job queue + acpx runner under `~/.pi-worker/telegram/jobs`
 - `scripts/vm/pi-worker-verify.sh` — verify guest worker prerequisites/config
 - `scripts/vm/pi-worker-supervisor-smoke-test` — temp-HOME smoke test for supervisor start/status/kill/restart/stop behavior
-- `scripts/vm/pi-worker-gateway-smoke-test` — temp-HOME smoke test for Bun gateway endpoints
+- `scripts/vm/pi-worker-gateway-smoke-test` — temp-HOME smoke test for Bun gateway queue endpoints
+- `scripts/vm/pi-worker-acpx-smoke-test` — repeatable real acpx smoke: enqueue job, run it, assert queue/result/session state
 - `templates/pi-worker/` — starter `settings.json`, `.env`, and SSH hardening snippets
+
+ACPX worker quick start:
+
+```bash
+npm install -g acpx@0.6.1
+export ACPX_AGENT=pi
+export ACPX_SESSION_MODE=persistent
+export ACPX_CWD="$PWD"
+./scripts/vm/pi-worker-supervisor start theo-pi "$PWD"
+```
+
+Repeatable real smoke on configured machine/VM:
+
+```bash
+bash scripts/vm/pi-worker-acpx-smoke-test
+# or from host into OrbStack VM
+bash scripts/vm/pi-worker-instance smoke-acpx
+```
 
 Security notes:
 - keep gateway bound to `127.0.0.1` unless you intentionally front it with a trusted tunnel/proxy

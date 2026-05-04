@@ -52,6 +52,7 @@ function makeMockRuntime(opts: {
   })
 
   const doctor = mock(async () => ({ ok: true, message: "healthy" }))
+  const close = mock(async () => {})
 
   const runtime = {
     ensureSession,
@@ -59,7 +60,7 @@ function makeMockRuntime(opts: {
     doctor,
     runTurn: mock(async function* () {}),
     cancel: mock(async () => {}),
-    close: mock(async () => {}),
+    close,
   }
 
   return runtime
@@ -274,6 +275,32 @@ test("sessionHealth returns ok from runtime.doctor()", async () => {
 // ---------------------------------------------------------------------------
 // Test: cancel calls turn.cancel and clears activeTurns
 // ---------------------------------------------------------------------------
+
+test("resetChatSession closes and discards persistent state", async () => {
+  const stateDir = await makeTmpDir()
+
+  const runtime = makeMockRuntime({})
+  mock.module("acpx/runtime", () => makeMockModule(runtime))
+
+  const { createAcpxBackend } = await import("./acpx-backend")
+  const backend = createAcpxBackend({
+    stateDir,
+    acpxStateDir: stateDir,
+    sessionMode: "persistent" as const,
+    agent: "pi",
+    cwd: undefined,
+    timeoutMs: 5000,
+    sessionTtlHours: 24,
+  })
+
+  await backend.resetChatSession("123")
+
+  expect(runtime.ensureSession).toHaveBeenCalledTimes(1)
+  expect(runtime.close).toHaveBeenCalledTimes(1)
+  const closeArg = (runtime.close as any).mock.calls[0][0] as { discardPersistentState?: boolean; reason?: string }
+  expect(closeArg.discardPersistentState).toBe(true)
+  expect(closeArg.reason).toBe("worker reset")
+})
 
 test("cancel calls the stored cancel fn for in-flight turn", async () => {
   const stateDir = await makeTmpDir()

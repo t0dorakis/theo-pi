@@ -7,19 +7,28 @@ GATEWAY="$SCRIPT_DIR/pi-worker-gateway.ts"
 
 pass() { printf '[pass] %s\n' "$1"; }
 fail() { printf '[fail] %s\n' "$1"; exit 1; }
+skip() { printf '[skip] %s\n' "$1"; }
+
+HAVE_TMUX=0
+if command -v tmux >/dev/null 2>&1; then
+  HAVE_TMUX=1
+fi
 
 TMPDIR_ROOT="$(mktemp -d)"
 GATEWAY_PID=""
 cleanup() {
   tmux kill-session -t smoke-gateway >/dev/null 2>&1 || true
   pkill -f 'pi-worker-gateway.ts' >/dev/null 2>&1 || true
-  if [[ -n "$GATEWAY_PID" ]]; then kill "$GATEWAY_PID" >/dev/null 2>&1 || true; fi
+  if [[ -n "$GATEWAY_PID" ]]; then
+    kill "$GATEWAY_PID" >/dev/null 2>&1 || true
+    wait "$GATEWAY_PID" >/dev/null 2>&1 || true
+  fi
   rm -rf "$TMPDIR_ROOT"
 }
 trap cleanup EXIT
 
 export HOME="$TMPDIR_ROOT/home"
-export PATH="$HOME/bin:$PATH"
+export PATH="$HOME/bin:$HOME/.bun/bin:$PATH"
 export PI_WORKER_SESSION="smoke-gateway"
 export PI_WORKER_GATEWAY_PORT="${PI_WORKER_GATEWAY_PORT:-18787}"
 export PI_WORKER_GATEWAY_TOKEN=test-token
@@ -27,17 +36,22 @@ export TELEGRAM_WEBHOOK_SECRET=telegram-secret
 export PI_WORKER_HEARTBEAT_INTERVAL_SECONDS=1
 export PI_WORKER_RESTART_DELAY_SECONDS=1
 export PI_WORKER_HEARTBEAT_STALE_SECONDS=5
-mkdir -p "$HOME/bin" "$HOME/workspaces/demo"
+export PI_WORKER_GATEWAY_DRAIN=0
+export ACPX_AGENT=pi
+export ACPX_SESSION_MODE=oneshot
+export ACPX_CWD="$HOME/workspaces/demo"
+mkdir -p "$HOME/bin" "$HOME/workspaces/demo" "$HOME/.pi-worker/checkpoints" "$HOME/.pi-worker/sessions"
 
-cat > "$HOME/bin/pi" <<'EOF'
-#!/usr/bin/env bash
-echo READY
-while IFS= read -r line; do echo "$line"; done
+if [[ "$HAVE_TMUX" -eq 1 ]]; then
+  "$SUPERVISOR" start smoke-gateway "$HOME/workspaces/demo" >/dev/null
+  sleep 3
+else
+  skip 'tmux missing; supervisor-backed gateway endpoints skipped'
+  cat > "$HOME/.pi-worker/health.json" <<EOF
+{"ok":true,"daemonStatus":"running","sessionName":"smoke-gateway","workspacePath":"$HOME/workspaces/demo","pid":null,"restartCount":0,"lastHeartbeatAt":null,"lastSuccessAt":null,"bootstrapVersion":null,"notes":["smoke health fixture"]}
 EOF
-chmod +x "$HOME/bin/pi"
+fi
 
-"$SUPERVISOR" start smoke-gateway "$HOME/workspaces/demo" >/dev/null
-sleep 3
 pkill -f 'pi-worker-gateway.ts' >/dev/null 2>&1 || true
 rm -f /tmp/pi-worker-gateway-smoke.log
 nohup bun "$GATEWAY" >/tmp/pi-worker-gateway-smoke.log 2>&1 &
@@ -57,24 +71,50 @@ curl_json() {
 }
 
 HEALTH="$(curl -sS "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/health")"
-echo "$HEALTH" | jq -e '.daemonStatus == "running"' >/dev/null || fail 'health endpoint'
+echo "$HEALTH" | jq -e '.daemonStatus == "running" and (.backend.ok == true or .backend.ok == false)' >/dev/null || fail 'health endpoint'
 pass 'health endpoint'
 
 RUN_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/run" -H 'content-type: application/json' -d '{"prompt":"hello from gateway"}')"
-echo "$RUN_RESPONSE" | jq -e '.ok == true and .message == "delegated to smoke-gateway"' >/dev/null || fail 'run endpoint ack'
-pass 'run endpoint ack'
+echo "$RUN_RESPONSE" | jq -e '.ok == true and .status == "queued" and (.id | length > 0)' >/dev/null || fail 'run endpoint queued'
+JOB_ID="$(echo "$RUN_RESPONSE" | jq -r '.id')"
+JOB_STATE="$HOME/.pi-worker/telegram/jobs/${JOB_ID}.json"
+[[ -f "$JOB_STATE" ]] || fail 'queued job file exists'
+echo "$JOB_STATE" >/dev/null
+pass 'run endpoint queued'
 
-RESTART_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/restart")"
-echo "$RESTART_RESPONSE" | jq -e '.ok == true' >/dev/null || fail 'restart endpoint'
-pass 'restart endpoint'
+if [[ "$HAVE_TMUX" -eq 1 ]]; then
+  RESTART_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/restart")"
+  echo "$RESTART_RESPONSE" | jq -e '.ok == true' >/dev/null || fail 'restart endpoint'
+  pass 'restart endpoint'
 
-CHECKPOINT_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/checkpoint" -H 'content-type: application/json' -d '{"label":"smoke"}')"
-CHECKPOINT_PATH="$(echo "$CHECKPOINT_RESPONSE" | jq -r '.checkpoint')"
-[[ -f "$CHECKPOINT_PATH" ]] || fail 'checkpoint endpoint'
-pass 'checkpoint endpoint'
+  CHECKPOINT_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/checkpoint" -H 'content-type: application/json' -d '{"label":"smoke"}')"
+  CHECKPOINT_PATH="$(echo "$CHECKPOINT_RESPONSE" | jq -r '.checkpoint')"
+  [[ -f "$CHECKPOINT_PATH" ]] || fail 'checkpoint endpoint'
+  pass 'checkpoint endpoint'
 
-LOGS="$(curl_json "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/logs")"
-[[ -n "$LOGS" ]] || fail 'logs endpoint'
-pass 'logs endpoint'
+  LOGS="$(curl_json "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/logs")"
+  [[ -n "$LOGS" ]] || fail 'logs endpoint'
+  pass 'logs endpoint'
+else
+  skip 'restart/checkpoint/logs endpoints require tmux supervisor'
+fi
+
+JOB_RESPONSE="$(curl_json "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/jobs/${JOB_ID}")"
+echo "$JOB_RESPONSE" | jq -e --arg id "$JOB_ID" '.ok == true and .job.id == $id and .job.backend == "acpx"' >/dev/null || fail 'job endpoint'
+pass 'job endpoint'
+
+if [[ "${PI_WORKER_GATEWAY_RESET_SMOKE:-0}" == "1" ]]; then
+  RESET_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/reset" -H 'content-type: application/json' -d '{"chatId":"smoke-gateway"}')"
+  echo "$RESET_RESPONSE" | jq -e '.ok == true and .status == "reset" and .chatId == "smoke-gateway"' >/dev/null || fail 'reset endpoint'
+  pass 'reset endpoint'
+else
+  RESET_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/reset" -H 'content-type: application/json' -d '{}')"
+  echo "$RESET_RESPONSE" | jq -e '.ok == false and .error == "missing chatId"' >/dev/null || fail 'reset endpoint validation'
+  pass 'reset endpoint validation'
+fi
+
+NUMERIC_RUN_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/run" -H 'content-type: application/json' -d '{"chatId":"123","prompt":"should reject"}')"
+echo "$NUMERIC_RUN_RESPONSE" | jq -e '.ok == false and (.error | test("numeric chatId"))' >/dev/null || fail 'numeric chatId rejected'
+pass 'numeric chatId rejected'
 
 pass 'gateway smoke checks passed'

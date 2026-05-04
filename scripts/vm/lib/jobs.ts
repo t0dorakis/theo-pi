@@ -10,7 +10,7 @@ export type JobQueue = ReturnType<typeof createJobQueue>
 export function createJobQueue(stateDir: string, options?: { leaseDurationSeconds?: number; backend?: string; resultFormat?: string }) {
   const stateStore = createStateStore(stateDir)
   const leaseDurationSeconds = options?.leaseDurationSeconds ?? 300
-  const backend = options?.backend ?? "tmux"
+  const backend = options?.backend ?? "acpx"
   const resultFormat = options?.resultFormat ?? "text"
 
   async function allJobs() {

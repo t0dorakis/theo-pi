@@ -1,5 +1,5 @@
 import { expect, test, mock } from "bun:test"
-import { mkdtemp } from "node:fs/promises"
+import { mkdtemp, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -143,6 +143,10 @@ test("submitPrompt writes done result with answer text", async () => {
 
   const result = await backend.readResult(job)
   expect(result).toBe("Hello from Pi")
+
+  const eventLog = await readFile(join(stateDir, "jobs", "events", `${job.id}.ndjson`), "utf8")
+  expect(eventLog).toContain('"type":"text_delta"')
+  expect(eventLog).toContain('"type":"turn_result"')
 })
 
 test("submitPrompt uses oneshot mode with jobId as sessionKey", async () => {
