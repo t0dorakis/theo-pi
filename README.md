@@ -134,21 +134,61 @@ For Theo's local Linux VM worker setup, repo includes:
 - `scripts/vm/pi-worker-verify-runtime` — compatibility wrapper for `pi-worker-supervisor verify`
 - `scripts/vm/pi-worker-fail-inject` — helper for runtime failure injection (`kill`, `stale`, `break-workspace`, `restore-workspace`)
 - `scripts/vm/pi-worker-runtime-checklist` — run supervised-runtime verification checks against a real session
-- `scripts/vm/pi-worker-delegate` — send a prompt into a live tmux-backed Pi session
-- `scripts/vm/pi-worker-gateway` / `pi-worker-gateway.ts` — Bun HTTP gateway with mandatory bearer auth for control endpoints, plus Telegram webhook support guarded by secret header validation
-- `scripts/vm/pi-worker-telegram-bot` / `pi-worker-telegram-bot.ts` — Bun long-poll Telegram bot; plain text runs prompts, shows typing status, and returns final Pi answer; control commands stay available
-- `scripts/vm/pi-worker-submit-job` / `pi-worker-run-job` — file-backed Telegram job queue + answer relay helpers under `~/.pi-worker/telegram/jobs`
+- `scripts/vm/pi-worker-gateway` / `pi-worker-gateway.ts` — Bun HTTP gateway; `/run` enqueues non-Telegram queue jobs
+- `scripts/vm/pi-worker-telegram-bot` / `pi-worker-telegram-bot.ts` — Telegram poller; commands enqueue numeric-chat jobs and handle control commands
+- `scripts/vm/pi-worker-telegram-runner` / `pi-worker-telegram-runner.ts` — Telegram runner; claims numeric-chat jobs, sends typing, and delivers final answers
+- `scripts/vm/pi-worker-submit-job` / `pi-worker-run-job` — file-backed job queue + ACPX runtime adapter under `~/.pi-worker/telegram/jobs`
 - `scripts/vm/pi-worker-verify.sh` — verify guest worker prerequisites/config
 - `scripts/vm/pi-worker-supervisor-smoke-test` — temp-HOME smoke test for supervisor start/status/kill/restart/stop behavior
-- `scripts/vm/pi-worker-gateway-smoke-test` — temp-HOME smoke test for Bun gateway endpoints
+- `scripts/vm/pi-worker-gateway-smoke-test` — temp-HOME smoke test for Bun gateway queue endpoints
+- `scripts/vm/pi-worker-acpx-smoke-test` — repeatable real acpx smoke: enqueue job, run it, assert queue/result/ACP session state
+- `scripts/vm/pi-worker-acp` — dogfood CLI for agent-to-VM delegation over ACPX (`run`, `result`, `cancel`, `status`)
+- `scripts/vm/pi-worker-acp-stdio.ts` — ACP-compatible stdio adapter used by `acpx --agent`
 - `templates/pi-worker/` — starter `settings.json`, `.env`, and SSH hardening snippets
+
+ACPX worker quick start:
+
+```bash
+npm install
+npm install -g acpx@0.6.1 # optional CLI convenience; runtime imports local package
+export ACPX_AGENT=pi
+export ACPX_SESSION_MODE=persistent
+export ACPX_CWD="$PWD"
+./scripts/vm/pi-worker-supervisor start theo-pi "$PWD"
+```
+
+Dogfood delegation from host to VM:
+
+```bash
+bash scripts/vm/pi-worker-acp "review this branch"
+bash scripts/vm/pi-worker-acp result
+bash scripts/vm/pi-worker-acp cancel
+```
+
+The wrapper prints job id, chat id, status, and exact retrieval/cancel commands so an orchestrating agent does not need to infer queue internals.
+
+Raw ACP adapter path:
+
+```bash
+THEO_PI_GATEWAY_URL=http://127.0.0.1:8787 \
+THEO_PI_GATEWAY_TOKEN=... \
+acpx --agent "bun scripts/vm/pi-worker-acp-stdio.ts" exec "review this branch"
+```
+
+Repeatable real smoke on configured machine/VM:
+
+```bash
+bash scripts/vm/pi-worker-acpx-smoke-test
+# or from host into OrbStack VM
+bash scripts/vm/pi-worker-instance smoke-acpx
+```
 
 Security notes:
 - keep gateway bound to `127.0.0.1` unless you intentionally front it with a trusted tunnel/proxy
 - set `PI_WORKER_GATEWAY_TOKEN`; gateway refuses to start without it
 - set `TELEGRAM_WEBHOOK_SECRET` before exposing `/telegram/webhook`; requests must include `x-telegram-bot-api-secret-token`
 - `TELEGRAM_ALLOWED_CHAT_IDS` limits bot actions by chat id, but does not replace webhook authentication
-- `docs/plans/2026-04-14-personal-autonomous-pi-worker-bootstrap-checklist.md` — step-by-step bootstrap checklist
+- `docs/plans/pi-worker-acpx-roadmap.md` — current pi-worker ACPX follow-up roadmap
 
 ## Development
 

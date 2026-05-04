@@ -1,4 +1,4 @@
-type FetchImpl = typeof fetch
+type FetchImpl = (url: string, init?: RequestInit) => Promise<Response>
 
 export function createTelegramApi(options: {
   token: string

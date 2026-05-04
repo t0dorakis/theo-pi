@@ -10,7 +10,7 @@ export type JobQueue = ReturnType<typeof createJobQueue>
 export function createJobQueue(stateDir: string, options?: { leaseDurationSeconds?: number; backend?: string; resultFormat?: string }) {
   const stateStore = createStateStore(stateDir)
   const leaseDurationSeconds = options?.leaseDurationSeconds ?? 300
-  const backend = options?.backend ?? "tmux"
+  const backend = options?.backend ?? "acpx"
   const resultFormat = options?.resultFormat ?? "text"
 
   async function allJobs() {
@@ -53,7 +53,7 @@ export function createJobQueue(stateDir: string, options?: { leaseDurationSecond
     },
     async claimNextJob(leaseOwner: string, claimedAt: string = nowIso()) {
       const jobs = await allJobs()
-      const next = jobs.find((job) => job.status === "pending" && !job.telegramDeliveredAt)
+      const next = jobs.find((job) => job.status === "pending" && !job.telegramDeliveredAt && /^\d+$/.test(job.chatId))
       if (!next) return null
       next.status = "running"
       next.startedAt = next.startedAt ?? claimedAt

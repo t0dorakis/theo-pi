@@ -103,8 +103,8 @@ write_session_state() {
   tmp_file="$(mktemp "${file}.tmp.XXXXXX")"
   jq -n \
     --arg runtimeVersion "v1" \
-    --arg activeSessionName "$session" \
-    --arg activeWorkspacePath "$workspace" \
+    --arg workerName "$session" \
+    --arg workspacePath "$workspace" \
     --arg daemonStatus "$status" \
     --argjson restartCount "$restart_count" \
     --arg piPidRaw "${pi_pid:-null}" \
@@ -113,8 +113,8 @@ write_session_state() {
     --arg lastRestartedAt "$last_restarted_at" \
     '{
       runtimeVersion: $runtimeVersion,
-      activeSessionName: $activeSessionName,
-      activeWorkspacePath: $activeWorkspacePath,
+      workerName: $workerName,
+      workspacePath: $workspacePath,
       piPid: ($piPidRaw | if . == "null" or . == "" then null else tonumber end),
       supervisorPid: ($supervisorPidRaw | if . == "null" or . == "" then null else tonumber end),
       daemonStatus: $daemonStatus,
@@ -138,12 +138,12 @@ write_heartbeat() {
   local tmp_file
   tmp_file="$(mktemp "$STATE_DIR/heartbeat.json.tmp.XXXXXX")"
   jq -n \
-    --arg sessionName "$session" \
+    --arg workerName "$session" \
     --arg workspacePath "$workspace" \
     --arg lastHeartbeatAt "$last_heartbeat_at" \
     --arg lastSuccessAt "$last_success_at" \
     '{
-      sessionName: $sessionName,
+      workerName: $workerName,
       workspacePath: $workspacePath,
       lastHeartbeatAt: ($lastHeartbeatAt | if length > 0 then . else null end),
       lastSuccessAt: ($lastSuccessAt | if length > 0 then . else null end)
@@ -171,7 +171,7 @@ write_health() {
   jq -n \
     --argjson ok "$ok" \
     --arg daemonStatus "$status" \
-    --arg sessionName "$session" \
+    --arg workerName "$session" \
     --arg workspacePath "$workspace" \
     --arg pidRaw "${pi_pid:-null}" \
     --argjson restartCount "$restart_count" \
@@ -182,7 +182,7 @@ write_health() {
     '{
       ok: $ok,
       daemonStatus: $daemonStatus,
-      sessionName: $sessionName,
+      workerName: $workerName,
       workspacePath: $workspacePath,
       pid: ($pidRaw | if . == "null" or . == "" then null else tonumber end),
       restartCount: $restartCount,
@@ -259,7 +259,7 @@ refresh_health_for_session() {
     return 1
   }
 
-  workspace="$(jq -r '.activeWorkspacePath' "$state_file")"
+  workspace="$(jq -r '.workspacePath' "$state_file")"
   status="$(jq -r '.daemonStatus // "failed"' "$state_file")"
   restart_count="$(jq -r '.restartCount // 0' "$state_file")"
   last_started_at="$(jq -r '.lastStartedAt // ""' "$state_file")"
@@ -268,8 +268,8 @@ refresh_health_for_session() {
   stop_file="$(session_stop_file "$session")"
 
   if [[ -f "$STATE_DIR/heartbeat.json" ]]; then
-    last_heartbeat_at="$(jq -r 'select(.sessionName == '"\"$session\""') | .lastHeartbeatAt // empty' "$STATE_DIR/heartbeat.json" 2>/dev/null || true)"
-    last_success_at="$(jq -r 'select(.sessionName == '"\"$session\""') | .lastSuccessAt // empty' "$STATE_DIR/heartbeat.json" 2>/dev/null || true)"
+    last_heartbeat_at="$(jq -r 'select((.workerName // .sessionName) == '"\"$session\""') | .lastHeartbeatAt // empty' "$STATE_DIR/heartbeat.json" 2>/dev/null || true)"
+    last_success_at="$(jq -r 'select((.workerName // .sessionName) == '"\"$session\""') | .lastSuccessAt // empty' "$STATE_DIR/heartbeat.json" 2>/dev/null || true)"
   fi
 
   if [[ -n "$supervisor_pid" ]] && ! kill -0 "$supervisor_pid" 2>/dev/null; then
@@ -321,13 +321,13 @@ checkpoint_command() {
   local label="${1:-manual}"
   local session workspace restart_count status now file latest_file
 
-  session="$(jq -r '.activeSessionName // empty' "$STATE_DIR/state.json" 2>/dev/null || true)"
+  session="$(jq -r '.workerName // .activeSessionName // empty' "$STATE_DIR/state.json" 2>/dev/null || true)"
   [[ -n "$session" ]] || {
     echo "no active session found" >&2
     exit 1
   }
 
-  workspace="$(read_session_field "$session" '.activeWorkspacePath' || true)"
+  workspace="$(read_session_field "$session" '.workspacePath' || true)"
   restart_count="$(read_session_field "$session" '.restartCount // 0' || echo 0)"
   status="$(read_session_field "$session" '.daemonStatus // "unknown"' || echo unknown)"
   now="$(now_iso)"
@@ -338,14 +338,14 @@ checkpoint_command() {
   jq -n \
     --arg label "$label" \
     --arg createdAt "$now" \
-    --arg sessionName "$session" \
+    --arg workerName "$session" \
     --arg workspacePath "$workspace" \
     --arg daemonStatus "$status" \
     --argjson restartCount "$restart_count" \
     '{
       label: $label,
       createdAt: $createdAt,
-      sessionName: $sessionName,
+      workerName: $workerName,
       workspacePath: $workspacePath,
       daemonStatus: $daemonStatus,
       restartCount: $restartCount
@@ -365,13 +365,13 @@ verify_command() {
   [[ -f "$BOOTSTRAP_VERSION_FILE" ]] || { echo "missing bootstrap version file: $BOOTSTRAP_VERSION_FILE"; ok=0; }
   [[ -f "$LOG_FILE" ]] || { echo "missing supervisor log: $LOG_FILE"; ok=0; }
 
-  session="$(jq -r '.activeSessionName // empty' "$STATE_DIR/state.json" 2>/dev/null || true)"
+  session="$(jq -r '.workerName // .activeSessionName // empty' "$STATE_DIR/state.json" 2>/dev/null || true)"
   if [[ -n "$session" ]]; then
-    workspace="$(read_session_field "$session" '.activeWorkspacePath' || true)"
+    workspace="$(read_session_field "$session" '.workspacePath' || true)"
     [[ -n "$workspace" && -d "$workspace" ]] || { echo "workspace missing for active session: $workspace"; ok=0; }
     [[ -f "$STATE_DIR/health.json" ]] || { echo "missing health file"; ok=0; }
     [[ -f "$STATE_DIR/heartbeat.json" ]] || { echo "missing heartbeat file"; ok=0; }
-    [[ -f "$(session_state_file "$session")" ]] || { echo "missing session state file for: $session"; ok=0; }
+    [[ -f "$(session_state_file "$session")" ]] || { echo "missing worker state file for: $session"; ok=0; }
   else
     echo "no active session in state.json"
   fi
@@ -399,8 +399,7 @@ print_status() {
 
   jq -r '
     [
-      "Worker: " + (if .ok then "healthy" else "unhealthy" end),
-      "Session: " + (.sessionName // "unknown"),
+      "Worker: " + (.workerName // "unknown") + " (" + (if .ok then "healthy" else "unhealthy" end) + ")",
       "Workspace: " + (.workspacePath // "unknown"),
       "Status: " + (.daemonStatus // "unknown"),
       "PID: " + ((.pid // "null")|tostring),
@@ -516,7 +515,7 @@ start_command() {
 stop_command() {
   local session="$1"
   local pid workspace
-  workspace="$(read_session_field "$session" '.activeWorkspacePath' || true)"
+  workspace="$(read_session_field "$session" '.workspacePath' || true)"
   pid="$(read_session_field "$session" '.supervisorPid' || true)"
   touch "$(session_stop_file "$session")"
   if tmux has-session -t "$session" 2>/dev/null; then
@@ -535,7 +534,7 @@ stop_command() {
 restart_command() {
   local session="$1"
   local workspace restart_count last_started_at
-  workspace="$(read_session_field "$session" '.activeWorkspacePath' || true)"
+  workspace="$(read_session_field "$session" '.workspacePath' || true)"
   [[ -n "$workspace" ]] || {
     echo "unknown session: $session" >&2
     exit 1
@@ -563,7 +562,7 @@ status_command() {
     format="json"
   fi
   if [[ -z "$session" ]]; then
-    session="$(jq -r '.activeSessionName // empty' "$STATE_DIR/state.json" 2>/dev/null || true)"
+    session="$(jq -r '.workerName // .activeSessionName // empty' "$STATE_DIR/state.json" 2>/dev/null || true)"
   fi
   [[ -n "$session" ]] || {
     echo "no active session found" >&2

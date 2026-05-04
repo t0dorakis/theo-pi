@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+VM_NAME="${PI_WORKER_VM_NAME:-pi-worker}"
+VM_REPO_DIR="${PI_WORKER_VM_REPO_DIR:-/home/piagent/workspaces/theo-pi}"
+REMOTE_TOKEN_FILE="${PI_WORKER_GATEWAY_TOKEN_FILE:-\$HOME/.pi-worker/gateway-token}"
+CHAT_ID="${PI_WORKER_ACP_CHAT_ID:-acp-dogfood}"
+TIMEOUT_SECONDS="${PI_WORKER_ACP_TIMEOUT_SECONDS:-900}"
+
+usage() {
+  cat <<'EOF'
+usage:
+  pi-worker-acp "prompt..."
+  pi-worker-acp run "prompt..."
+  pi-worker-acp result [job-id]
+  pi-worker-acp cancel [job-id]
+  pi-worker-acp status
+
+Environment:
+  PI_WORKER_VM_NAME             VM name (default: pi-worker)
+  PI_WORKER_VM_REPO_DIR         repo path in VM
+  PI_WORKER_ACP_CHAT_ID         persistent worker chat id (default: acp-dogfood)
+  PI_WORKER_ACP_TIMEOUT_SECONDS acpx timeout (default: 900)
+EOF
+}
+
+run_vm() {
+  orbctl run -m "$VM_NAME" bash -lc "$1"
+}
+
+ensure_gateway() {
+  run_vm "set -euo pipefail
+    mkdir -p ~/.pi-worker
+    if [ ! -s "$REMOTE_TOKEN_FILE" ]; then
+      (umask 077; python3 - <<'PY' > "$REMOTE_TOKEN_FILE"
+import secrets
+print(secrets.token_urlsafe(32))
+PY
+)
+    fi
+    token=\$(cat "$REMOTE_TOKEN_FILE")
+    if ! curl -fsS -H \"Authorization: Bearer \$token\" http://127.0.0.1:8787/status >/dev/null 2>&1; then
+      tmux kill-session -t theo-pi-gateway >/dev/null 2>&1 || true
+      cd '$VM_REPO_DIR'
+      tmux new-session -d -s theo-pi-gateway \"source ~/.env.pi 2>/dev/null || true; export PI_WORKER_GATEWAY_TOKEN=\$token; export PI_WORKER_GATEWAY_DRAIN=1; ~/bin/pi-worker-gateway\"
+      for i in 1 2 3 4 5; do
+        sleep 1
+        curl -fsS -H \"Authorization: Bearer \$token\" http://127.0.0.1:8787/status >/dev/null 2>&1 && exit 0
+      done
+      tmux capture-pane -pt theo-pi-gateway:0 -S -80 >&2 || true
+      exit 1
+    fi
+  " >/dev/null
+}
+
+last_job_remote='~/.pi-worker/acp/last-job-id'
+
+run_prompt() {
+  local prompt="$*"
+  [[ -n "$prompt" ]] || { usage; exit 1; }
+  ensure_gateway
+
+  local local_prompt
+  local remote_prompt
+  local_prompt="$(mktemp)"
+  remote_prompt="/tmp/pi-worker-acp-prompt-$$-$RANDOM.txt"
+  printf '%s' "$prompt" > "$local_prompt"
+  orbctl push -m "$VM_NAME" "$local_prompt" "$remote_prompt" >/dev/null
+  rm -f "$local_prompt"
+
+  local remote_output
+  set +e
+  remote_output=$(run_vm "set -euo pipefail
+    cd '$VM_REPO_DIR'
+    export PATH=\"\$HOME/bin:\$HOME/.bun/bin:\$PATH\"
+    export THEO_PI_GATEWAY_URL=http://127.0.0.1:8787
+    export THEO_PI_GATEWAY_TOKEN=\$(cat "$REMOTE_TOKEN_FILE")
+    export PI_WORKER_ACP_FIXED_CHAT_ID='$CHAT_ID'
+    unset OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY
+    mkdir -p ~/.pi-worker/acp
+    before=\$(date -u +%s)
+    prompt=\$(cat '$remote_prompt')
+    rm -f '$remote_prompt'
+    set +e
+    output=\$(./node_modules/.bin/acpx --agent \"bun scripts/vm/pi-worker-acp-stdio.ts\" --timeout '$TIMEOUT_SECONDS' --format quiet exec \"\$prompt\" 2>&1)
+    code=\$?
+    set -e
+    latest=\$(for f in ~/.pi-worker/telegram/jobs/*.json; do
+      [ -f \"\$f\" ] || continue
+      chat=\$(jq -r '.chatId // empty' \"\$f\" 2>/dev/null || true)
+      created=\$(jq -r '.createdAt // empty' \"\$f\" 2>/dev/null || true)
+      [ \"\$chat\" = '$CHAT_ID' ] || continue
+      epoch=\$(python3 - <<'PY_EPOCH' \"\$created\" 2>/dev/null || echo 0
+from datetime import datetime
+import sys
+try:
+    print(int(datetime.fromisoformat(sys.argv[1].replace('Z', '+00:00')).timestamp()))
+except Exception:
+    print(0)
+PY_EPOCH
+)
+      [ \"\$epoch\" -ge \"\$before\" ] || continue
+      echo \"\$epoch \$f\"
+    done | sort -nr | head -1 | cut -d' ' -f2-)
+    job_id=\"\"
+    status=\"unknown\"
+    if [ -n \"\$latest\" ]; then
+      job_id=\$(basename \"\$latest\" .json)
+      echo \"\$job_id\" > ~/.pi-worker/acp/last-job-id
+      status=\$(jq -r '.status // \"unknown\"' \"\$latest\")
+    fi
+    if [ -n \"\$output\" ]; then printf '%s\n' \"\$output\"; fi
+    echo
+    echo '---'
+    echo \"job: \${job_id:-unknown}\"
+    echo \"chat: $CHAT_ID\"
+    echo \"status: \$status\"
+    echo \"result: pi-worker-acp result \${job_id:-}\"
+    if [ \"\$status\" != done ]; then
+      [ -z \"\$job_id\" ] || echo \"cancel: pi-worker-acp cancel \$job_id\"
+      exit 1
+    fi
+    exit 0
+  ")
+  set -e
+  printf '%s\n' "$remote_output"
+  if printf '%s\n' "$remote_output" | grep -qx 'status: done'; then
+    return 0
+  fi
+  return 1
+}
+
+result_cmd() {
+  local job_id="${1:-}"
+  ensure_gateway
+  run_vm "set -euo pipefail
+    if [ -z '$job_id' ]; then
+      job_id=\$(cat ~/.pi-worker/acp/last-job-id 2>/dev/null || true)
+    else
+      job_id='$job_id'
+    fi
+    [ -n \"\$job_id\" ] || { echo 'no job id; run pi-worker-acp first' >&2; exit 1; }
+    job=~/.pi-worker/telegram/jobs/\$job_id.json
+    result=~/.pi-worker/jobs/results/\$job_id.json
+    events=~/.pi-worker/jobs/events/\$job_id.ndjson
+    echo \"job: \$job_id\"
+    if [ -f \"\$job\" ]; then
+      echo \"status: \$(jq -r .status \"\$job\")\"
+      echo \"chat: \$(jq -r .chatId \"\$job\")\"
+      error=\$(jq -r '.error // empty' \"\$job\")
+      [ -z \"\$error\" ] || echo \"error: \$error\"
+    else
+      echo 'status: missing-job'
+    fi
+    echo \"result_file: \$result\"
+    echo \"events_file: \$events\"
+    echo '--- answer ---'
+    if [ -f \"\$result\" ]; then
+      jq -r '.answer // .error // empty' \"\$result\"
+    elif [ -f \"\$job\" ]; then
+      jq -r '.answer // .error // empty' \"\$job\"
+    fi
+    echo '--- recent events ---'
+    if [ -f \"\$events\" ]; then
+      tail -20 \"\$events\" | jq -r '.event | if type==\"object\" then (.text // .type // tostring) else tostring end' 2>/dev/null || tail -20 \"\$events\"
+    fi
+  "
+}
+
+cancel_cmd() {
+  local job_id="${1:-}"
+  ensure_gateway
+  run_vm "set -euo pipefail
+    if [ -z '$job_id' ]; then
+      job_id=\$(cat ~/.pi-worker/acp/last-job-id 2>/dev/null || true)
+    else
+      job_id='$job_id'
+    fi
+    [ -n \"\$job_id\" ] || { echo 'no job id; run pi-worker-acp first' >&2; exit 1; }
+    token=\$(cat "$REMOTE_TOKEN_FILE")
+    curl -fsS -X POST -H \"Authorization: Bearer \$token\" http://127.0.0.1:8787/jobs/\$job_id/cancel | jq .
+  "
+}
+
+status_cmd() {
+  ensure_gateway
+  run_vm "token=\$(cat "$REMOTE_TOKEN_FILE"); curl -fsS -H \"Authorization: Bearer \$token\" http://127.0.0.1:8787/status | jq .; echo; latest=\$(cat ~/.pi-worker/acp/last-job-id 2>/dev/null || true); [ -n \"\$latest\" ] && echo \"last_job: \$latest\" || true"
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  "") usage; exit 1 ;;
+  run) shift; run_prompt "$@" ;;
+  result) shift; result_cmd "${1:-}" ;;
+  cancel) shift; cancel_cmd "${1:-}" ;;
+  status) shift; status_cmd ;;
+  -h|--help|help) usage ;;
+  *) run_prompt "$@" ;;
+esac

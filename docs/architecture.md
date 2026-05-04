@@ -1,54 +1,63 @@
 # Pi Worker Architecture
 
-Current merged runtime for Theo's local Pi worker.
+Current architecture for the Pi worker on `feat/acpx-backend`. For domain language, see [`docs/CONTEXT.md`](./CONTEXT.md) and [`docs/glossary.md`](./glossary.md).
 
 ## Topology
 
 ```text
-╔══════════════════════════════════════════════════════════════════════════════╗
-║ macOS host                                                                 ║
-║  └─ OrbStack VM: `theo-pi` (Ubuntu)                                        ║
-║      └─ runtime user: current local setup uses `/home/minimi`              ║
-║                                                                             ║
-║      Operator / host integration layer                                     ║
-║      ───────────────────────────────────────────────────────────────────    ║
-║      SSH / tmux / OrbStack / `~/bin/pi-worker-*` wrappers                  ║
-║      `scripts/vm/bootstrap-ubuntu-pi-worker.sh`                            ║
-║      `scripts/vm/pi-worker-instance`                                       ║
-║                                │                                            ║
-║                                ▼                                            ║
-║      Runtime control layer                                                 ║
-║      ───────────────────────────────────────────────────────────────────    ║
-║      `pi-worker-supervisor`                                                ║
-║      - starts/stops tmux-backed Pi session                                 ║
-║      - writes state / heartbeat / health / checkpoints                     ║
-║      - exposes start/status/restart/stop/checkpoint/verify/tail-logs       ║
-║                                │                                            ║
-║                                ▼                                            ║
-║      Bun runtime core                                                      ║
-║      ───────────────────────────────────────────────────────────────────    ║
-║      `scripts/vm/lib/`                                                     ║
-║      - env / paths / types                                                 ║
-║      - state-store / json-file / health / time                             ║
-║      - jobs / job-lease / result-channel                                   ║
-║      - backend interface                                                   ║
-║                                │                                            ║
-║                  ┌─────────────┴─────────────┐                              ║
-║                  ▼                           ▼                              ║
-║      Transport adapters              Execution backend                      ║
-║      ───────────────────            ───────────────────                     ║
-║      `pi-worker-gateway.ts`         `backends/tmux-backend.ts`             ║
-║      `pi-worker-telegram-bot.ts`    `pi-worker-delegate`                   ║
-║      HTTP + Telegram UX             single tmux Pi session                 ║
-║                  │                           │                              ║
-║                  └─────────────┬─────────────┘                              ║
-║                                ▼                                            ║
-║      Pi session + workspace execution                                       ║
-║      ───────────────────────────────────────────────────────────────────    ║
-║      tmux session: `theo-pi`                                                ║
-║      Pi CLI + repo workspace under `~/workspaces/theo-pi`                  ║
-║      bash / git / node / bun / jq / rg / gh                                ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+macOS host / OrbStack VM / local smoke test
+  |
+  | optional operator plane
+  | - pi-worker-supervisor (still tmux-aware)
+  | - start/status/restart/stop/checkpoint/tail-logs wrappers
+  | - future replacement target: Bun-native daemon, optionally wrapped by systemd/launchd
+  |
+  v
+execution plane
+  |
+  +-- HTTP gateway: scripts/vm/pi-worker-gateway.ts
+  |     - /run enqueues non-Telegram jobs
+  |     - /health includes worker status + ACPX health
+  |     - /reset closes inner ACP sessions and writes cancel markers
+  |     - /jobs/<id>/events exposes event-log records for ACP adapter polling
+  |     - /jobs/<id>/cancel writes cross-process cancel markers
+  |
+  +-- Telegram poller: scripts/vm/pi-worker-telegram-bot.ts
+  |     - commands enqueue numeric-chat jobs
+  |     - handles status/reset/restart/log/checkpoint commands
+  |
+  +-- Telegram runner: scripts/vm/pi-worker-telegram-runner.ts
+  |     - claims numeric-chat jobs
+  |     - sends typing heartbeats and delivers final answers
+  |
+  +-- ACP stdio adapter: scripts/vm/pi-worker-acp-stdio.ts
+  |     - speaks official ACP over stdin/stdout via @agentclientprotocol/sdk
+  |     - lets acpx spawn the worker with --agent
+  |     - maps outer ACP sessions to non-numeric acp-* chat IDs
+  |
+  +-- CLI: scripts/vm/pi-worker-submit-job.ts / pi-worker-run-job.ts
+        - submit creates queue records
+        - run claims one job and executes it
+
+queue + result channel
+  |
+  +-- queue: ~/.pi-worker/telegram/jobs/<jobId>.json
+  |     - authoritative lifecycle: pending -> running -> done | failed
+  |
+  +-- artifacts: ~/.pi-worker/jobs/{requests,results,events,cancels,leases}/
+        - request/result snapshots
+        - ACPX event logs
+        - cross-process cancel markers
+        - leases
+
+ACPX runtime adapter
+  |
+  +-- scripts/vm/lib/acpx/runtime-adapter.ts
+        - creates/uses AcpxRuntime
+        - oneshot mode: session key = jobId
+        - persistent mode: session key = `${agent}-${chatId}`
+        - streams ACPX events to NDJSON
+        - writes result-channel artifacts
 ```
 
 ## Runtime state layout
@@ -61,148 +70,156 @@ Current merged runtime for Theo's local Pi worker.
 ├── bootstrap-version
 ├── supervisor.log
 ├── sessions/
-│   ├── <session>.json
-│   ├── <session>.stop
-│   └── <session>.supervisor.pid
+│   ├── <workerName>.json
+│   ├── <workerName>.stop
+│   └── <workerName>.supervisor.pid
 ├── checkpoints/
 │   ├── latest.json
 │   └── <label>-<timestamp>.json
+├── session-locks/
+├── acp/
+│   └── sessions/
 ├── telegram/
 │   └── jobs/
 │       └── <jobId>.json
 └── jobs/
-    ├── requests/
-    │   └── <jobId>.json
-    ├── results/
-    │   └── <jobId>.json
-    └── leases/
+    ├── requests/<jobId>.json
+    ├── results/<jobId>.json
+    ├── events/<jobId>.ndjson
+    ├── cancels/<jobId>.cancel
+    ├── leases/
+    └── runner.log
 ```
+
+`telegram/jobs/` is the canonical queue directory despite its legacy name. `jobs/` stores artifacts, not lifecycle truth.
 
 ## Main flows
 
-### 1. Operator flow
+### HTTP gateway flow
 
 ```text
-operator -> SSH / orbctl -> tmux / ~/bin/pi-worker-* -> supervisor/runtime
+client
+  -> POST /run
+  -> queue.enqueueJob(chatId = gateway-<uuid> unless supplied)
+  -> gateway drainer starts pi-worker-run-job
+  -> worker-runner claims queue job
+  -> ACPX runtime adapter starts one turn
+  -> queue.completeJob/failJob
+  -> client polls GET /jobs/<jobId>
 ```
 
-### 2. HTTP gateway flow
+Gateway rejects numeric `chatId` values because numeric chats are reserved for Telegram delivery.
+
+### Telegram flow
 
 ```text
-client -> pi-worker-gateway -> runtime core -> tmux backend -> Pi session
+Telegram /run <prompt>
+  -> bot validates allowed chat
+  -> queue.enqueueJob(chatId = numeric Telegram chat id)
+  -> bot drainer starts pi-worker-run-job
+  -> worker-runner claims queue job
+  -> ACPX runtime adapter starts one turn
+  -> queue.completeJob/failJob
+  -> bot delivers final answer for numeric chat id
 ```
 
-### 3. Telegram flow
+### ACP stdio adapter flow
 
 ```text
-Telegram message
-  -> pi-worker-telegram-bot
-  -> enqueue telegram job
-  -> pi-worker-run-job
-  -> tmux backend injects prompt into live Pi session
-  -> result-channel writes jobs/results/<jobId>.json
-  -> bot sends only final answer
+acpx --agent "bun scripts/vm/pi-worker-acp-stdio.ts" "fix failing tests"
+  -> ACP initialize/session.new/session.prompt over stdio
+  -> adapter POSTs /run with chatId = acp-<uuid>
+  -> adapter polls /jobs/<jobId>/events and maps records to ACP session/update
+  -> adapter polls /jobs/<jobId> for terminal queue status
+  -> adapter returns ACP PromptResponse { stopReason }
+```
+
+The adapter uses official ACP schema at the external boundary. Gateway JSON endpoints remain pi-worker internals.
+
+### Reset / cancel flow
+
+```text
+/reset <chatId>
+  -> requestCancelJobsForChat writes jobs/cancels/<jobId>.cancel for running jobs
+  -> resetWorkerChatSession closes ACP session with discardPersistentState=true
+  -> active runner heartbeat sees cancel marker
+  -> runtime.cancel(jobId)
+  -> runner cleans cancel marker in finally
 ```
 
 ## Job / result contract
 
-Current runtime uses explicit request/result files so transports do not need to scrape tmux directly.
-
-### Request
+### Queue record
 
 ```json
 {
-  "id": "2026-04-19T13-29-26-441Z-...",
-  "backendId": "tmux",
-  "createdAt": "2026-04-19T13:29:26Z",
-  "acceptedAt": "2026-04-19T13:29:26Z",
-  "leaseOwner": "runner-theo-pi",
-  "leaseExpiresAt": "2026-04-19T13:34:26Z",
-  "resultChannel": "file:/home/minimi/.pi-worker/jobs/results/<jobId>.json",
-  "request": {
-    "prompt": "What tools do you have available?"
-  }
+  "id": "2026-05-04T13-29-26-441Z-...",
+  "chatId": "gateway-...",
+  "prompt": "What tools do you have available?",
+  "status": "pending",
+  "createdAt": "2026-05-04T13:29:26Z",
+  "startedAt": null,
+  "completedAt": null,
+  "answer": null,
+  "error": null,
+  "backend": "acpx",
+  "resultFormat": "text"
 }
 ```
 
-### Result
+### Result artifact
 
 ```json
 {
-  "id": "2026-04-19T13-29-26-441Z-...",
-  "backendId": "tmux",
+  "id": "2026-05-04T13-29-26-441Z-...",
+  "backendId": "acpx",
   "status": "done",
-  "answer": "read, bash, edit, write, auto_skill_manage, web_search, code_search, fetch_content, get_search_content",
-  "completedAt": "2026-04-19T13:29:28Z"
+  "answer": "...",
+  "completedAt": "2026-05-04T13:29:28Z"
 }
 ```
 
-Failure shape:
+Failure artifact:
 
 ```json
 {
-  "id": "2026-04-19T13-29-26-441Z-...",
-  "backendId": "tmux",
+  "id": "2026-05-04T13-29-26-441Z-...",
+  "backendId": "acpx",
   "status": "failed",
-  "error": "missing or malformed <final_answer> block after 600s",
-  "completedAt": "2026-04-19T13:39:28Z"
+  "error": "...",
+  "completedAt": "2026-05-04T13:39:28Z"
 }
 ```
 
-## Current prompt/result boundary
+### Event artifact
 
-Runtime currently asks Pi to answer with exactly one XML element:
+`~/.pi-worker/jobs/events/<jobId>.ndjson` contains `session_ready`, normalized ACPX runtime events, and terminal `turn_result` records.
 
-```text
-<final_answer id="...">...</final_answer>
-```
+## Concurrency model
 
-Important implementation detail:
-- delegated prompt must stay single-line when injected through tmux
-- exact parse tags should appear only once in prompt text
-- backend may inspect tmux pane, but higher layers read only formal result files
+- Persistent mode serializes same-chat turns with `acpx-turn-${agent}-${chatId}`.
+- Oneshot mode locks by `acpx-turn-${jobId}`.
+- File locks use `O_EXCL` to coordinate subprocesses.
+- Different persistent chats can run independently.
 
-## Key scripts
+## Stable vs unfinished
 
-| Script | Purpose |
-| --- | --- |
-| `scripts/vm/bootstrap-ubuntu-pi-worker.sh` | install system deps, Bun, Pi, wrappers, worker dirs |
-| `scripts/vm/install-theo-pi-worker.sh` | clone/update repo and configure worker install in VM |
-| `scripts/vm/pi-worker-supervisor` | supervised runtime shell entrypoint |
-| `scripts/vm/pi-worker-gateway.ts` | Bun HTTP gateway |
-| `scripts/vm/pi-worker-telegram-bot.ts` | Bun Telegram polling bot |
-| `scripts/vm/pi-worker-submit-job.ts` | enqueue Telegram/runtime job |
-| `scripts/vm/pi-worker-run-job.ts` | claim one job, drive backend, write result channel |
-| `scripts/vm/pi-worker-delegate` | paste prompt into live tmux Pi session |
-| `scripts/vm/pi-worker-instance` | lean dev helper for status/logs/sync/restart/clean-stuck |
-| `scripts/vm/pi-worker-runtime-checklist` | real-VM runtime verification |
-| `scripts/vm/pi-worker-supervisor-smoke-test` | local temp-HOME supervisor smoke tests |
-| `scripts/vm/pi-worker-gateway-smoke-test` | local temp-HOME gateway smoke tests |
+Stable now:
 
-## State machine snapshot
+- ACPX-only job execution
+- ACP-compatible stdio adapter smoke path for `acpx --agent "bun scripts/vm/pi-worker-acp-stdio.ts" ...`
+- queue as lifecycle authority
+- result-channel request/result/event artifacts
+- per-session turn locking
+- persistent ACP sessions
+- reset/cancel markers
+- local smoke tests with and without tmux
+- OrbStack ACPX smoke path
 
-```text
-start -> starting -> running
-                    │
-                    ├─ stop -> stopped
-                    ├─ heartbeat stale -> stale
-                    ├─ workspace missing -> failed
-                    └─ Pi/tmux crash -> restart loop -> running | failed
-```
+Still intentionally unfinished:
 
-## What is stable vs unfinished
-
-Stable in current merged state:
-- supervised tmux-backed Pi runtime
-- machine-readable health/state files
-- Bun gateway
-- Telegram polling bot
-- explicit queue + result channel
-- tmux backend abstraction
-- local smoke tests and real-VM verification path
-
-Still intentionally unfinished from larger refactor plan:
-- supervisor core moved fully into Bun
-- shared runtime command handlers across gateway + Telegram
-- queue resilience controls like `/queue` and `/cancel`
-- cloud-transition seams and CI workflow hardening
+- richer ACP conformance suite beyond stdio smoke
+- Telegram streaming of structured ACPX events
+- Bun-native daemon replacing tmux operator plane
+- state directory rename from `telegram/jobs/` to `jobs/queue/`
+- ACPX attachments and flow-run support

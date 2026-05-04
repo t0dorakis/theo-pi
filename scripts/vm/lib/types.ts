@@ -1,11 +1,11 @@
-export type RuntimeDaemonStatus = "starting" | "running" | "stale" | "failed" | "stopped"
+export type WorkerDaemonStatus = "starting" | "running" | "stale" | "failed" | "stopped"
 
 export type WorkerJobStatus = "pending" | "running" | "done" | "failed"
 
 export type HealthState = {
   ok: boolean
-  daemonStatus: RuntimeDaemonStatus
-  sessionName: string | null
+  daemonStatus: WorkerDaemonStatus
+  workerName: string | null
   workspacePath: string | null
   pid: number | null
   restartCount: number
@@ -15,13 +15,13 @@ export type HealthState = {
   notes: string[]
 }
 
-export type SessionState = {
+export type WorkerState = {
   runtimeVersion: string
-  activeSessionName: string
-  activeWorkspacePath: string
+  workerName: string
+  workspacePath: string
   piPid: number | null
   supervisorPid: number | null
-  daemonStatus: RuntimeDaemonStatus
+  daemonStatus: WorkerDaemonStatus
   restartCount: number
   lastStartedAt: string | null
   lastRestartedAt: string | null

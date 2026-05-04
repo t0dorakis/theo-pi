@@ -27,6 +27,28 @@ test("poller enqueues plain text and does not run jobs", async () => {
   expect(sent).toHaveLength(0)
 })
 
+test("poller handles reset immediately", async () => {
+  const sent: string[] = []
+  const poller = createTelegramPoller({
+    queue: { enqueueJob: async () => undefined },
+    telegram: {
+      assertAllowed: () => {},
+      sendMessage: async (_chatId: number, text: string) => void sent.push(text),
+    },
+    commands: {
+      status: async () => "status",
+      reset: async (chatId) => `reset ${chatId}`,
+      restart: async () => "restart",
+      logs: async () => "logs",
+      checkpoint: async () => "checkpoint",
+    },
+    helpText: "help text",
+  })
+
+  await poller.handleMessage({ chat: { id: 123 }, text: "/reset" })
+  expect(sent).toEqual(["reset 123"])
+})
+
 test("poller handles help immediately", async () => {
   const sent: string[] = []
   const poller = createTelegramPoller({

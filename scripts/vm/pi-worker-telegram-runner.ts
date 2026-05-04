@@ -3,16 +3,26 @@ import { execFile } from "node:child_process"
 import { mkdir } from "node:fs/promises"
 import { promisify } from "node:util"
 
-import { getRuntimeEnv } from "./lib/env"
+import { getWorkerEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
 import { getScriptDir, localScript } from "./lib/paths"
 import { createTelegramApi } from "./lib/telegram-api"
 import { createTelegramRunner } from "./lib/telegram-runner"
 
 const execFileAsync = promisify(execFile)
-const env = getRuntimeEnv()
+const env = getWorkerEnv()
 const scriptDir = getScriptDir(import.meta.url)
-const queue = createJobQueue(env.stateDir, { backend: env.backend })
+const queue = createJobQueue(env.stateDir, { backend: "acpx" })
+const telegramQueue = {
+  reapExpiredLeases: queue.reapExpiredLeases,
+  async claimNextJob() {
+    const jobs = await queue.listJobs()
+    return jobs.find((job) => job.status === "pending" && !job.telegramDeliveredAt && /^\d+$/.test(job.chatId)) ?? null
+  },
+  completeJob: queue.completeJob,
+  failJob: queue.failJob,
+  markDelivered: queue.markDelivered,
+}
 
 if (!env.telegramBotToken) {
   console.error("Missing TELEGRAM_BOT_TOKEN")
@@ -40,7 +50,7 @@ const telegram = createTelegramApi({
 })
 
 const runner = createTelegramRunner({
-  queue,
+  queue: telegramQueue,
   jobs: {
     async runJob(jobId: string) {
       try {
@@ -59,7 +69,7 @@ const runner = createTelegramRunner({
   telegram,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   typingIntervalMs: env.telegramTypingIntervalMs,
-  leaseOwner: `telegram-runner-${env.session}`,
+  leaseOwner: `telegram-runner-${env.workerName}`,
 })
 
 while (true) {

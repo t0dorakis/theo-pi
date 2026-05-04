@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -f "$HOME/.env.pi" ]]; then
+  # shellcheck disable=SC1090
+  source "$HOME/.env.pi"
+fi
+
 pass() { printf '[pass] %s\n' "$1"; }
 fail() { printf '[fail] %s\n' "$1"; exit 1; }
+info() { printf '[info] %s\n' "$1"; }
 check() { command -v "$1" >/dev/null 2>&1 || fail "$1 missing"; pass "$1 present"; }
 
 check ssh
@@ -14,6 +20,7 @@ check node
 check npm
 check pi
 check bun
+check acpx
 check pi-worker-supervisor
 check pi-worker-status
 check pi-worker-checkpoint
@@ -21,13 +28,15 @@ check pi-worker-tail-logs
 check pi-worker-verify-runtime
 check pi-worker-fail-inject
 check pi-worker-runtime-checklist
-check pi-worker-delegate
 check pi-worker-submit-job
 check pi-worker-run-job
 check pi-worker-gateway
 check pi-worker-telegram-bot
+check pi-worker-telegram-runner
+check pi-worker-acp
 check pi-worker-gateway-smoke-test
 check pi-worker-supervisor-smoke-test
+check pi-worker-acpx-smoke-test
 
 [[ -d "$HOME/workspaces" ]] || fail "~/workspaces missing"
 pass "~/workspaces exists"

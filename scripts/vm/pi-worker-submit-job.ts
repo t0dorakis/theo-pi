@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
-import { getRuntimeEnv } from "./lib/env"
+import { getWorkerEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
 
-const env = getRuntimeEnv()
-const queue = createJobQueue(env.stateDir)
+const env = getWorkerEnv()
+const queue = createJobQueue(env.stateDir, { backend: "acpx" })
 
 const [chatId, ...promptParts] = process.argv.slice(2)
 const prompt = promptParts.join(" ").trim()

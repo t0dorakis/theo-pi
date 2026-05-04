@@ -5,6 +5,7 @@ export function createTelegramPoller(options: {
   telegram: { assertAllowed(chatId: number): void; sendMessage(chatId: number, text: string): Promise<void> }
   commands: {
     status(): Promise<string>
+    reset?(chatId: number): Promise<string>
     restart(): Promise<string>
     logs(): Promise<string>
     checkpoint(label: string): Promise<string>
@@ -32,6 +33,11 @@ export function createTelegramPoller(options: {
 
     if (textValue === "/status") {
       await options.telegram.sendMessage(chatId, await options.commands.status())
+      return
+    }
+
+    if (textValue === "/reset" && options.commands.reset) {
+      await options.telegram.sendMessage(chatId, await options.commands.reset(chatId))
       return
     }
 

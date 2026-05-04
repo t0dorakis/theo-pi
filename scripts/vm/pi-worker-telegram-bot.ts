@@ -3,22 +3,23 @@ import { execFile } from "node:child_process"
 import { mkdir } from "node:fs/promises"
 import { promisify } from "node:util"
 
-import { getRuntimeEnv } from "./lib/env"
+import { getWorkerEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
 import { getScriptDir, localScript } from "./lib/paths"
 import { createStateStore } from "./lib/state-store"
 import { createTelegramApi } from "./lib/telegram-api"
 import { createTelegramPoller } from "./lib/telegram-poller"
+import { requestCancelJobsForChat, resetWorkerChatSession } from "./lib/worker-runner"
 
 const execFileAsync = promisify(execFile)
-const env = getRuntimeEnv()
+const env = getWorkerEnv()
 const scriptDir = getScriptDir(import.meta.url)
 const stateStore = createStateStore(env.stateDir)
-const queue = createJobQueue(env.stateDir)
+const queue = createJobQueue(env.stateDir, { backend: "acpx" })
 
 const token = env.telegramBotToken
 const allowedChatIds = env.telegramAllowedChatIds
-const session = env.session
+const workerName = env.workerName
 const pollTimeoutSeconds = env.telegramPollTimeoutSeconds
 const logsLines = env.telegramLogLines
 
@@ -46,6 +47,7 @@ const helpText = [
   "plain text - queue prompt and return final answer",
   "/run <prompt> - same as plain text",
   "/status - show worker health JSON",
+  "/reset - reset persistent acpx session for this chat",
   "/restart - restart supervised session",
   "/logs - tail supervisor logs",
   "/checkpoint [label] - create checkpoint metadata",
@@ -75,10 +77,15 @@ const poller = createTelegramPoller({
   commands: {
     async status() {
       const stored = await stateStore.readHealth()
-      return stored ? JSON.stringify(stored, null, 2) : await runLocal(localScript(scriptDir, "pi-worker-status"), [session, "--json"])
+      return stored ? JSON.stringify(stored, null, 2) : await runLocal(localScript(scriptDir, "pi-worker-status"), [workerName, "--json"])
+    },
+    async reset(chatId: number) {
+      const cancelled = await requestCancelJobsForChat(String(chatId), env)
+      await resetWorkerChatSession(String(chatId), env)
+      return `reset persistent acpx session${cancelled.length > 0 ? `; cancel requested for ${cancelled.length} queued/running job(s)` : ""}`
     },
     async restart() {
-      return runLocal(localScript(scriptDir, "pi-worker-restart"), [session])
+      return runLocal(localScript(scriptDir, "pi-worker-restart"), [workerName])
     },
     async logs() {
       return runLocal(localScript(scriptDir, "pi-worker-tail-logs"), [String(logsLines)])
@@ -112,6 +119,6 @@ async function poll() {
   }
 }
 
-console.log(`Starting Telegram Pi worker bot poller for session ${session}`)
+console.log(`Starting Telegram Pi worker bot poller for worker ${workerName}`)
 await ensureDirs()
 await poll()

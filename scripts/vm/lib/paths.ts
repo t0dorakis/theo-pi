@@ -8,6 +8,8 @@ export type RuntimePaths = {
   jobsDir: string
   jobRequestsDir: string
   jobResultsDir: string
+  jobEventsDir: string
+  jobCancelsDir: string
   jobLeasesDir: string
 }
 
@@ -28,6 +30,8 @@ export function getRuntimePaths(stateDir: string, importMetaUrl: string): Runtim
     jobsDir,
     jobRequestsDir: join(jobsDir, "requests"),
     jobResultsDir: join(jobsDir, "results"),
+    jobEventsDir: join(jobsDir, "events"),
+    jobCancelsDir: join(jobsDir, "cancels"),
     jobLeasesDir: join(jobsDir, "leases"),
   }
 }

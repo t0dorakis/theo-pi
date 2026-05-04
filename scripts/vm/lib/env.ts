@@ -1,10 +1,25 @@
-export type RuntimeEnv = {
+export type AcpxConfig = {
+  agent: string
+  sessionMode: "oneshot" | "persistent"
+  cwd: string | undefined
+  /** Acpx session store root (separate from PI_WORKER_STATE_DIR). Default: ~/.pi-worker/acp */
+  stateDir: string
+  /** Per-turn timeout in milliseconds. Default: 10 minutes. */
+  timeoutMs: number
+  /** TTL for idle persistent sessions in hours. Default: 24. */
+  sessionTtlHours: number
+}
+
+export type WorkerEnv = {
+  acpx: AcpxConfig
+
   homeDir: string
   stateDir: string
-  session: string
+  workerName: string
   gatewayHost: string
   gatewayPort: number
   gatewayToken: string
+  gatewayDrain: boolean
   telegramWebhookSecret: string
   telegramBotToken: string
   telegramAllowedChatIds: Set<string>
@@ -23,15 +38,25 @@ function intFromEnv(name: string, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-export function getRuntimeEnv(): RuntimeEnv {
+export function getWorkerEnv(): WorkerEnv {
   const homeDir = process.env.HOME ?? process.cwd()
   return {
+    acpx: {
+      agent: process.env.ACPX_AGENT ?? "pi",
+      sessionMode: (process.env.ACPX_SESSION_MODE === "persistent" ? "persistent" : "oneshot") as "oneshot" | "persistent",
+      cwd: process.env.ACPX_CWD || undefined,
+      stateDir: process.env.ACPX_STATE_DIR ?? `${homeDir}/.pi-worker/acp`,
+      timeoutMs: intFromEnv("ACPX_TIMEOUT_MS", 10 * 60 * 1000),
+      sessionTtlHours: intFromEnv("ACPX_SESSION_TTL_HOURS", 24),
+    },
+
     homeDir,
     stateDir: process.env.PI_WORKER_STATE_DIR ?? `${homeDir}/.pi-worker`,
-    session: process.env.PI_WORKER_SESSION ?? "theo-pi",
+    workerName: process.env.PI_WORKER_NAME ?? process.env.PI_WORKER_SESSION ?? "theo-pi",
     gatewayHost: process.env.PI_WORKER_GATEWAY_HOST ?? "127.0.0.1",
     gatewayPort: intFromEnv("PI_WORKER_GATEWAY_PORT", 8787),
     gatewayToken: process.env.PI_WORKER_GATEWAY_TOKEN ?? "",
+    gatewayDrain: process.env.PI_WORKER_GATEWAY_DRAIN !== "0",
     telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET ?? "",
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
     telegramAllowedChatIds: new Set(

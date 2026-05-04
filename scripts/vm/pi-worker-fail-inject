@@ -38,8 +38,9 @@ from datetime import datetime, timedelta, timezone
 path, session, seconds = sys.argv[1], sys.argv[2], int(sys.argv[3])
 with open(path) as f:
     data = json.load(f)
-if data.get('sessionName') != session:
-    raise SystemExit(f'heartbeat session mismatch: {data.get("sessionName")} != {session}')
+worker_name = data.get('workerName') or data.get('sessionName')
+if worker_name != session:
+    raise SystemExit(f'heartbeat worker mismatch: {worker_name} != {session}')
 stale = (datetime.now(timezone.utc) - timedelta(seconds=seconds)).strftime('%Y-%m-%dT%H:%M:%SZ')
 data['lastHeartbeatAt'] = stale
 with open(path, 'w') as f:
@@ -66,7 +67,7 @@ PY
     fi
     state_file="${PI_WORKER_STATE_DIR:-$HOME/.pi-worker}/sessions/$2.json"
     [[ -f "$state_file" ]] || { echo "missing state file for session: $2" >&2; exit 1; }
-    original="$(jq -r '.activeWorkspacePath // empty' "$state_file")"
+    original="$(jq -r '.workspacePath // empty' "$state_file")"
     broken="${original}.broken-by-pi-worker-fail-inject"
     [[ -d "$broken" ]] || { echo "broken workspace not found: $broken" >&2; exit 1; }
     mv "$broken" "$original"
