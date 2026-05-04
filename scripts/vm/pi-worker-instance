@@ -142,7 +142,7 @@ sync_cmd() {
   }
 
   local archive="/tmp/pi-worker-instance-sync.tgz"
-  (cd "$ROOT_DIR" && tar -czf "$archive" "${existing[@]}")
+  (cd "$ROOT_DIR" && COPYFILE_DISABLE=1 tar -czf "$archive" "${existing[@]}")
   orbctl push -m "$VM_NAME" "$archive" "$REMOTE_ARCHIVE" >/dev/null
   run_vm "cd '$VM_REPO_DIR' && tar -xzf '$REMOTE_ARCHIVE'"
 
