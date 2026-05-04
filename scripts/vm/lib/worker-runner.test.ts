@@ -5,7 +5,7 @@ import { join } from "node:path"
 
 import type { WorkerEnv } from "./env"
 import { createJobQueue } from "./jobs"
-import { runQueuedJob } from "./worker-runner"
+import { requestCancelJob, runQueuedJob } from "./worker-runner"
 
 const tempDirs: string[] = []
 
@@ -104,4 +104,21 @@ test("persistent jobs for same chat serialize by turn lock", async () => {
   expect(await queue.getJob(second.id)).toMatchObject({ status: "done", answer: "second" })
   const eventLog = await readFile(join(root, "jobs", "events", `${first.id}.ndjson`), "utf8")
   expect(eventLog).toContain('"type":"text_delta"')
+})
+
+test("cancel marker before claim prevents acpx turn from starting", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worker-runner-cancel-"))
+  tempDirs.push(root)
+  const env = makeEnv(root, "persistent")
+  const queue = createJobQueue(root, { backend: "acpx" })
+  const job = await queue.enqueueJob({ chatId: "chat-1", prompt: "answer:never" })
+  const mockRuntime = makeMockModule()
+  mock.module("acpx/runtime", () => mockRuntime.module)
+
+  await requestCancelJob(job.id, "test cancel", env)
+  const result = await runQueuedJob(job.id, env)
+
+  expect(result).toMatchObject({ status: "failed", error: "job canceled before start" })
+  expect(mockRuntime.runtime.startTurn).toHaveBeenCalledTimes(0)
+  expect(await queue.getJob(job.id)).toMatchObject({ status: "failed", error: "job canceled before start" })
 })

@@ -94,10 +94,13 @@ export class TheoPiAcpAgent {
 
         const job = await this.gateway.job(submitted.id)
         if (job.status === "done" || job.status === "failed") {
-          if (!emittedText && job.answer) {
+          const terminalText = job.status === "failed"
+            ? `Worker job failed: ${job.error ?? "unknown error"}`
+            : job.answer
+          if (!emittedText && terminalText) {
             await this.connection.sessionUpdate({
               sessionId: params.sessionId,
-              update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: job.answer } },
+              update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: terminalText } },
             } as acp.SessionNotification)
           }
           return { stopReason: stopReasonFromJob(job), userMessageId: params.messageId ?? undefined } as acp.PromptResponse

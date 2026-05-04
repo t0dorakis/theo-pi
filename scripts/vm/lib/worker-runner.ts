@@ -82,6 +82,20 @@ export async function runQueuedJob(jobId: string, env: WorkerEnv = getWorkerEnv(
     const job = await queue.claimJob(jobId, runnerId)
     if (!job) throw new Error(`job not claimable: ${jobId}`)
 
+    if (await cancelRequested(env, job.id)) {
+      const error = "job canceled before start"
+      await resultChannel.writeResult({
+        id: job.id,
+        backendId: "acpx",
+        status: "failed",
+        error,
+        completedAt: new Date().toISOString(),
+      })
+      await queue.failJob(job.id, error)
+      await unlink(cancelPath(env, job.id)).catch(() => {})
+      return { status: "failed", error, jobId: job.id, resultPath }
+    }
+
     const heartbeatIntervalMs = Math.max(1000, Math.min(env.jobPollIntervalMs, 30_000))
     let heartbeatFailureLogged = false
     let cancelSent = false

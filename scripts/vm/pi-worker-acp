@@ -61,6 +61,15 @@ run_prompt() {
   local prompt="$*"
   [[ -n "$prompt" ]] || { usage; exit 1; }
   ensure_gateway
+
+  local local_prompt
+  local remote_prompt
+  local_prompt="$(mktemp)"
+  remote_prompt="/tmp/pi-worker-acp-prompt-$$-$RANDOM.txt"
+  printf '%s' "$prompt" > "$local_prompt"
+  orbctl push -m "$VM_NAME" "$local_prompt" "$remote_prompt" >/dev/null
+  rm -f "$local_prompt"
+
   run_vm "set -euo pipefail
     cd '$VM_REPO_DIR'
     export PATH=\"\$HOME/bin:\$HOME/.bun/bin:\$PATH\"
@@ -69,38 +78,48 @@ run_prompt() {
     export PI_WORKER_ACP_FIXED_CHAT_ID='$CHAT_ID'
     unset OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY
     mkdir -p ~/.pi-worker/acp
-    prompt=\$(cat <<'EOF_PROMPT'
-$prompt
-EOF_PROMPT
-)
+    before=\$(date -u +%s)
+    prompt=\$(cat '$remote_prompt')
+    rm -f '$remote_prompt'
     set +e
     output=\$(./node_modules/.bin/acpx --agent \"bun scripts/vm/pi-worker-acp-stdio.ts\" --timeout '$TIMEOUT_SECONDS' --format quiet exec \"\$prompt\" 2>&1)
     code=\$?
     set -e
-    latest=\$(ls -t ~/.pi-worker/telegram/jobs/*.json 2>/dev/null | head -1 || true)
+    latest=\$(for f in ~/.pi-worker/telegram/jobs/*.json; do
+      [ -f \"\$f\" ] || continue
+      chat=\$(jq -r '.chatId // empty' \"\$f\" 2>/dev/null || true)
+      created=\$(jq -r '.createdAt // empty' \"\$f\" 2>/dev/null || true)
+      [ \"\$chat\" = '$CHAT_ID' ] || continue
+      epoch=\$(python3 - <<'PY_EPOCH' \"\$created\" 2>/dev/null || echo 0
+from datetime import datetime
+import sys
+try:
+    print(int(datetime.fromisoformat(sys.argv[1].replace('Z', '+00:00')).timestamp()))
+except Exception:
+    print(0)
+PY_EPOCH
+)
+      [ \"\$epoch\" -ge \"\$before\" ] || continue
+      echo \"\$epoch \$f\"
+    done | sort -nr | head -1 | cut -d' ' -f2-)
     job_id=\"\"
+    status=\"unknown\"
     if [ -n \"\$latest\" ]; then
       job_id=\$(basename \"\$latest\" .json)
       echo \"\$job_id\" > ~/.pi-worker/acp/last-job-id
+      status=\$(jq -r '.status // \"unknown\"' \"\$latest\")
     fi
-    if [ \$code -eq 0 ]; then
-      printf '%s\n' \"\$output\"
-      echo
-      echo '---'
-      echo \"job: \${job_id:-unknown}\"
-      echo \"chat: $CHAT_ID\"
-      echo 'status: done'
-      echo \"result: pi-worker-acp result \${job_id:-}\"
-      exit 0
+    if [ -n \"\$output\" ]; then printf '%s\n' \"\$output\"; fi
+    echo
+    echo '---'
+    echo \"job: \${job_id:-unknown}\"
+    echo \"chat: $CHAT_ID\"
+    echo \"status: \$status\"
+    echo \"result: pi-worker-acp result \${job_id:-}\"
+    if [ \"\$status\" != done ]; then
+      [ -z \"\$job_id\" ] || echo \"cancel: pi-worker-acp cancel \$job_id\"
+      exit 1
     fi
-    echo \"\$output\" >&2
-    echo >&2
-    echo '--- worker retrieval ---' >&2
-    echo \"job: \${job_id:-unknown}\" >&2
-    echo \"chat: $CHAT_ID\" >&2
-    echo \"status: \$( [ -n \"\$job_id\" ] && jq -r .status ~/.pi-worker/telegram/jobs/\$job_id.json 2>/dev/null || echo unknown )\" >&2
-    echo \"poll: pi-worker-acp result \$job_id\" >&2
-    echo \"cancel: pi-worker-acp cancel \$job_id\" >&2
     exit \$code
   "
 }
