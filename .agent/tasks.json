@@ -52,7 +52,7 @@
     "id": "task-26",
     "title": "Expose pi-worker VM as ACP-compatible dogfood agent",
     "status": "done",
-    "notes": "Added ACP stdio adapter, gateway event polling/cancel endpoints, text-only event mapper, smoke test, and pi-worker-acp wrapper with token provisioning, stable acp-dogfood chat, result retrieval, cancel, and status commands. Verified local checks/tests and VM wrapper smoke.",
-    "updatedAt": "2026-05-04T16:05:00.000Z"
+    "notes": "Added ACP stdio adapter, gateway event polling/cancel endpoints, text-only event mapper, smoke test, and pi-worker-acp wrapper. VM dogfood review found prompt shell-injection, silent failed-job UX, and queued-cancel race; fixed with temp-file prompt transport, explicit failed-job text/status handling, cancel-before-start guard, and regression test. Event polling scalability remains follow-up.",
+    "updatedAt": "2026-05-04T16:25:00.000Z"
   }
 ]
