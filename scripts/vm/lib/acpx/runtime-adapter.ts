@@ -125,7 +125,7 @@ export function createAcpxRuntimeAdapter(options: AcpxRuntimeAdapterOptions): Ac
     handle: AcpRuntimeHandle
     attempt: "initial" | "retry"
     requestId: string
-  }): Promise<{ result: AcpRuntimeTurnResult; answer: string }> {
+  }): Promise<{ result: AcpRuntimeTurnResult; answer: string; hadOutput: boolean }> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs)
     timeout.unref?.()
@@ -150,7 +150,8 @@ export function createAcpxRuntimeAdapter(options: AcpxRuntimeAdapterOptions): Ac
       }
       const result = await turn.result
       await eventLog.append(input.job.id, input.attempt, { type: "turn_result", result })
-      return { result, answer: chunks.join("").trim() }
+      const answer = chunks.join("").trim()
+      return { result, answer, hadOutput: answer.length > 0 }
     } finally {
       clearTimeout(timeout)
     }
@@ -216,6 +217,10 @@ export function createAcpxRuntimeAdapter(options: AcpxRuntimeAdapterOptions): Ac
       } else if (attempt.result.status === "cancelled") {
         await writeFailure(job, `cancelled: ${attempt.result.stopReason ?? ""}`)
       } else if (isRetryableSessionResult(attempt.result)) {
+        if (attempt.hadOutput) {
+          await writeFailure(job, "retry skipped after partial output from failed attempt")
+          return
+        }
         await retryWithFreshSession(job, runtime, mod).catch(async (error) => {
           const msg = error instanceof AcpRuntimeError ? `AcpRuntimeError(${error.code}): ${error.message}` : String(error)
           await eventLog.append(job.id, "retry", { type: "retry_error", error: msg })

@@ -107,6 +107,10 @@ EVENTS_RESPONSE="$(curl_json "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/jobs/${
 echo "$EVENTS_RESPONSE" | jq -e --arg id "$JOB_ID" '.ok == true and .jobId == $id and (.events | type == "array")' >/dev/null || fail 'job events endpoint'
 pass 'job events endpoint'
 
+TRAVERSAL_RESPONSE="$(curl_json "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/jobs/..%2F..%2Ftmp/events?after=0")"
+echo "$TRAVERSAL_RESPONSE" | jq -e '.ok == false and .error == "invalid job id"' >/dev/null || fail 'job id traversal rejected'
+pass 'job id traversal rejected'
+
 CANCEL_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/jobs/${JOB_ID}/cancel")"
 echo "$CANCEL_RESPONSE" | jq -e --arg id "$JOB_ID" '.ok == true and .status == "cancel_requested" and .id == $id' >/dev/null || fail 'job cancel endpoint'
 pass 'job cancel endpoint'

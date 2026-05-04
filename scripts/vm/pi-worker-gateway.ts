@@ -78,6 +78,12 @@ async function appendRunnerLog(jobId: string, message: string) {
   await appendFile(runnerLogPath, `[${new Date().toISOString()}] [${jobId}] ${message}\n`).catch(() => {})
 }
 
+function safeJobIdFromPath(value: string) {
+  const jobId = decodeURIComponent(value)
+  if (!/^[A-Za-z0-9._:-]+$/.test(jobId)) return null
+  return jobId
+}
+
 async function runJobProcess(jobId: string) {
   try {
     const { stdout, stderr } = await execFileAsync(localScript(scriptDir, "pi-worker-run-job"), [jobId], {
@@ -272,7 +278,8 @@ const server = Bun.serve({
 
       const eventsMatch = url.pathname.match(/^\/jobs\/([^/]+)\/events$/)
       if (request.method === "GET" && eventsMatch) {
-        const jobId = decodeURIComponent(eventsMatch[1])
+        const jobId = safeJobIdFromPath(eventsMatch[1])
+        if (!jobId) return json({ ok: false, error: "invalid job id" }, { status: 400 })
         const after = Number.parseInt(url.searchParams.get("after") ?? "0", 10)
         const content = await readFile(`${runtimePaths.jobEventsDir}/${jobId}.ndjson`, "utf8").catch(() => "")
         const events = content.split("\n")
@@ -284,7 +291,8 @@ const server = Bun.serve({
 
       const cancelMatch = url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/)
       if (request.method === "POST" && cancelMatch) {
-        const jobId = decodeURIComponent(cancelMatch[1])
+        const jobId = safeJobIdFromPath(cancelMatch[1])
+        if (!jobId) return json({ ok: false, error: "invalid job id" }, { status: 400 })
         const job = await queue.getJob(jobId)
         if (!job) return json({ ok: false, error: "job not found" }, { status: 404 })
         await requestCancelJob(jobId, "gateway cancel", env)
@@ -292,7 +300,8 @@ const server = Bun.serve({
       }
 
       if (request.method === "GET" && url.pathname.startsWith("/jobs/")) {
-        const jobId = url.pathname.slice("/jobs/".length)
+        const jobId = safeJobIdFromPath(url.pathname.slice("/jobs/".length))
+        if (!jobId) return json({ ok: false, error: "invalid job id" }, { status: 400 })
         const job = await queue.getJob(jobId)
         if (!job) {
           return json({ ok: false, error: "job not found" }, { status: 404 })

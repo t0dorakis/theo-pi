@@ -5,7 +5,7 @@ import { join } from "node:path"
 
 import type { WorkerEnv } from "./env"
 import { createJobQueue } from "./jobs"
-import { requestCancelJob, runQueuedJob } from "./worker-runner"
+import { requestCancelJob, requestCancelJobsForChat, runQueuedJob } from "./worker-runner"
 
 const tempDirs: string[] = []
 
@@ -121,4 +121,21 @@ test("cancel marker before claim prevents acpx turn from starting", async () => 
   expect(result).toMatchObject({ status: "failed", error: "job canceled before start" })
   expect(mockRuntime.runtime.startTurn).toHaveBeenCalledTimes(0)
   expect(await queue.getJob(job.id)).toMatchObject({ status: "failed", error: "job canceled before start" })
+})
+
+test("reset cancellation includes pending jobs for chat", async () => {
+  const root = await mkdtemp(join(tmpdir(), "worker-runner-reset-"))
+  tempDirs.push(root)
+  const env = makeEnv(root, "persistent")
+  const queue = createJobQueue(root, { backend: "acpx" })
+  const pending = await queue.enqueueJob({ chatId: "chat-1", prompt: "answer:pending" })
+  await queue.enqueueJob({ chatId: "chat-2", prompt: "answer:other" })
+  const mockRuntime = makeMockModule()
+  mock.module("acpx/runtime", () => mockRuntime.module)
+
+  const canceled = await requestCancelJobsForChat("chat-1", env)
+  const result = await runQueuedJob(pending.id, env)
+
+  expect(canceled).toEqual([pending.id])
+  expect(result).toMatchObject({ status: "failed", error: "job canceled before start" })
 })

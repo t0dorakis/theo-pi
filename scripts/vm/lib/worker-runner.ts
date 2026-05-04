@@ -184,11 +184,11 @@ export async function requestCancelJobsForChat(chatId: string, env: WorkerEnv = 
   const paths = getRuntimePaths(env.stateDir, import.meta.url)
   await mkdir(paths.jobCancelsDir, { recursive: true })
   const jobs = await queue.listJobs()
-  const running = jobs.filter((job) => job.chatId === chatId && job.status === "running")
-  for (const job of running) {
+  const cancellable = jobs.filter((job) => job.chatId === chatId && (job.status === "running" || job.status === "pending"))
+  for (const job of cancellable) {
     await requestCancelJob(job.id, "reset requested", env)
   }
-  return running.map((job) => job.id)
+  return cancellable.map((job) => job.id)
 }
 
 export async function getAcpxRuntimeHealth(env: WorkerEnv = getWorkerEnv()) {
