@@ -179,7 +179,7 @@ Create reusable modules:
 
 Define exact types for:
 - `HealthState`
-- `WorkerState`
+- `SessionState`
 - `WorkerJob`
 - `WorkerJobStatus`
 

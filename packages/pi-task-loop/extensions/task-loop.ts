@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { truncateToWidth } from "@mariozechner/pi-tui";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
@@ -30,6 +31,15 @@ type LoopState = {
   lastStopReason?: string | null;
 };
 
+type LoopEventEntry = {
+  version: 1;
+  kind: "tick_queued" | "tick_started" | "loop_stopped" | "task_snapshot" | "command";
+  timestamp: string;
+  detail?: string;
+  state?: Partial<LoopState>;
+  activeTaskCount?: number;
+};
+
 type TaskToolAction = "list" | "upsert" | "set_status" | "remove" | "conclude" | "replace_all";
 
 type TaskToolParams = {
@@ -47,9 +57,12 @@ type TaskToolParams = {
 };
 
 const STATUS_KEY = "task-loop";
+const LOOP_EVENT_TYPE = "task-loop-state";
 const DEFAULT_INTERVAL_SECONDS = 15 * 60;
 const MIN_INTERVAL_SECONDS = 15;
 const TICK_MARKER = "[task-loop tick]";
+const MAX_VISIBLE_TASKS = 8;
+const SPINNER = ["✳", "✴", "✵", "✶", "✷", "✸", "✹", "✺", "✻", "✼", "✽"];
 
 function statePath(ctx: ExtensionContext) {
   return path.join(ctx.cwd, ".agent", "loop-state.json");
@@ -142,6 +155,24 @@ function formatInterval(seconds: number) {
   return `${seconds}s`;
 }
 
+function formatTimestamp(value?: string) {
+  if (!value) return "none";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toISOString().replace(".000Z", "Z");
+}
+
+function formatRemaining(nextTickAt?: string, now = Date.now()) {
+  if (!nextTickAt) return "now";
+  const target = new Date(nextTickAt).getTime();
+  if (Number.isNaN(target)) return "?";
+  const diffMs = Math.max(0, target - now);
+  const totalSeconds = Math.ceil(diffMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function normalizeTask(raw: Partial<LoopTask>, fallbackIndex: number): LoopTask {
   return {
     id: String(raw.id ?? `task-${fallbackIndex + 1}`),
@@ -196,6 +227,22 @@ function loopShouldStop(ctx: ExtensionContext): string | null {
   const activeTasks = tasks.filter((task) => task.status !== "done");
   if (activeTasks.length === 0) return "no active tasks";
   return null;
+}
+
+function autoConcludeIfAllDone(ctx: ExtensionContext, reason: string) {
+  const tasks = readTasks(ctx);
+  if (tasks.length === 0) return false;
+  if (tasks.some((task) => task.status !== "done")) return false;
+
+  const history = readTaskHistory(ctx);
+  history.push({
+    concludedAt: nowIso(),
+    reason,
+    tasks,
+  });
+  writeTaskHistory(ctx, history);
+  writeTasks(ctx, []);
+  return true;
 }
 
 function buildTickPrompt(ctx: ExtensionContext, state: LoopState) {
@@ -298,35 +345,165 @@ function normalizeTaskToolParams(params: TaskToolParams) {
 
 export default function taskLoop(pi: ExtensionAPI) {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let countdownTimer: ReturnType<typeof setInterval> | undefined;
+  let widgetTimer: ReturnType<typeof setInterval> | undefined;
+  let widgetFrame = 0;
+  let widgetRegistered = false;
+  let widgetTui: any;
 
   function clearTimer() {
     if (timer) clearTimeout(timer);
     timer = undefined;
   }
 
+  function clearCountdown() {
+    if (countdownTimer) clearInterval(countdownTimer);
+    countdownTimer = undefined;
+  }
+
+  function clearWidgetTimer() {
+    if (widgetTimer) clearInterval(widgetTimer);
+    widgetTimer = undefined;
+  }
+
+  function appendLoopEntry(ctx: ExtensionContext, entry: LoopEventEntry) {
+    pi.appendEntry(LOOP_EVENT_TYPE, entry);
+    if (!ctx.hasUI) return;
+  }
+
+  function statusText(state: LoopState, activeCount: number, now = Date.now()) {
+    if (!state.active) return "loop";
+
+    const parts = [
+      "loop",
+      `${activeCount} active`,
+      formatRemaining(state.nextTickAt, now),
+    ];
+
+    if (state.iteration > 0) parts.push(`tick ${state.iteration}`);
+    return parts.join(" · ");
+  }
+
+  function taskIcon(task: LoopTask) {
+    if (task.status === "in_progress") return SPINNER[widgetFrame % SPINNER.length];
+    if (task.status === "done") return "✔";
+    if (task.status === "blocked") return "⧖";
+    return "◻";
+  }
+
+  function renderWidget(ctx: ExtensionContext, tui: any, theme: any) {
+    const tasks = readTasks(ctx);
+    const state = readState(ctx);
+    const width = tui.terminal.columns;
+    const truncate = (line: string) => truncateToWidth(line, width);
+
+    if (tasks.length === 0) return [];
+
+    const done = tasks.filter((task) => task.status === "done").length;
+    const inProgress = tasks.filter((task) => task.status === "in_progress").length;
+    const blocked = tasks.filter((task) => task.status === "blocked").length;
+    const pending = tasks.filter((task) => task.status === "pending").length;
+    const counts = [`${done} done`, `${inProgress} active`, `${pending} open`];
+    if (blocked > 0) counts.push(`${blocked} blocked`);
+
+    const header = truncate(`${theme.fg("accent", "●")} ${theme.fg("accent", `${tasks.length} tasks (${counts.join(", ")})`)} ${theme.fg("dim", `· next ${formatRemaining(state.nextTickAt)} · iteration ${state.iteration}`)}`);
+    const lines = [header];
+
+    const visible = tasks.slice(0, MAX_VISIBLE_TASKS);
+    for (const task of visible) {
+      const icon = taskIcon(task);
+      const id = theme.fg("dim", `#${task.id}`);
+      const title = task.status === "done"
+        ? theme.fg("dim", theme.strikethrough ? theme.strikethrough(task.title) : task.title)
+        : task.status === "in_progress"
+          ? theme.fg("accent", `${task.title}…`)
+          : task.title;
+      const badge = task.status === "blocked" ? theme.fg("warning", " blocked") : "";
+      lines.push(truncate(`  ${task.status === "done" ? theme.fg("success", icon) : task.status === "in_progress" ? theme.fg("accent", icon) : icon} ${id} ${title}${badge}`));
+    }
+
+    if (tasks.length > MAX_VISIBLE_TASKS) {
+      lines.push(truncate(theme.fg("dim", `    … and ${tasks.length - MAX_VISIBLE_TASKS} more`)));
+    }
+
+    return lines;
+  }
+
   function updateStatus(ctx: ExtensionContext) {
     if (!ctx.hasUI) return;
     const state = readState(ctx);
     const activeCount = getActiveTasks(ctx).length;
-    const text = state.active
-      ? `loop:on i${state.iteration} ${formatInterval(state.intervalSeconds)} t${activeCount}`
-      : `loop:off${state.lastStopReason ? ` ${state.lastStopReason}` : ""}`;
-    ctx.ui.setStatus(STATUS_KEY, text);
+    const tasks = readTasks(ctx);
+    ctx.ui.setStatus(STATUS_KEY, statusText(state, activeCount));
+
+    if (tasks.length === 0) {
+      if (widgetRegistered) {
+        ctx.ui.setWidget(STATUS_KEY, undefined);
+        widgetRegistered = false;
+      }
+      clearWidgetTimer();
+      return;
+    }
+
+    if (!widgetRegistered) {
+      ctx.ui.setWidget(STATUS_KEY, (tui, theme) => {
+        widgetTui = tui;
+        return {
+          render: () => renderWidget(ctx, tui, theme),
+          invalidate: () => {},
+        };
+      }, { placement: "aboveEditor" });
+      widgetRegistered = true;
+    } else if (widgetTui) {
+      widgetTui.requestRender();
+    }
+
+    if (!widgetTimer) {
+      widgetTimer = setInterval(() => {
+        widgetFrame += 1;
+        if (widgetTui) widgetTui.requestRender();
+      }, 120);
+    }
+  }
+
+  function restartCountdown(ctx: ExtensionContext) {
+    clearCountdown();
+    const state = readState(ctx);
+    if (!state.active || !state.nextTickAt || !ctx.hasUI) return;
+    countdownTimer = setInterval(() => updateStatus(ctx), 1000);
   }
 
   function stopLoop(ctx: ExtensionContext, reason: string, notify = false) {
     clearTimer();
+    clearCountdown();
+    const autoConcluded = reason === "no active tasks"
+      ? autoConcludeIfAllDone(ctx, "auto-concluded after all tasks reached done")
+      : false;
     const state = readState(ctx);
     state.active = false;
     state.nextTickAt = undefined;
     state.lastStopReason = reason;
     writeState(ctx, state);
+    appendLoopEntry(ctx, {
+      version: 1,
+      kind: "loop_stopped",
+      timestamp: nowIso(),
+      detail: autoConcluded ? `${reason}; archived completed tasks` : reason,
+      state: { active: state.active, iteration: state.iteration, lastStopReason: state.lastStopReason },
+      activeTaskCount: getActiveTasks(ctx).length,
+    });
     updateStatus(ctx);
-    if (notify && ctx.hasUI) ctx.ui.notify(`Task loop stopped: ${reason}`, "info");
+    if (notify && ctx.hasUI) {
+      const message = autoConcluded
+        ? `Task loop stopped: ${reason}; archived completed tasks`
+        : `Task loop stopped: ${reason}`;
+      ctx.ui.notify(message, "info");
+    }
   }
 
   function queueTick(ctx: ExtensionContext, immediate = false) {
     clearTimer();
+    clearCountdown();
     const state = readState(ctx);
     if (!state.active && !immediate) {
       updateStatus(ctx);
@@ -344,8 +521,17 @@ export default function taskLoop(pi: ExtensionAPI) {
     if (state.active) {
       state.nextTickAt = nextTickAt;
       writeState(ctx, state);
+      appendLoopEntry(ctx, {
+        version: 1,
+        kind: "tick_queued",
+        timestamp: nowIso(),
+        detail: immediate ? "immediate" : `delay=${delayMs}`,
+        state: { active: state.active, iteration: state.iteration, nextTickAt: state.nextTickAt },
+        activeTaskCount: getActiveTasks(ctx).length,
+      });
     }
     updateStatus(ctx);
+    restartCountdown(ctx);
 
     timer = setTimeout(() => {
       const freshState = readState(ctx);
@@ -359,7 +545,16 @@ export default function taskLoop(pi: ExtensionAPI) {
       freshState.lastTickAt = nowIso();
       freshState.lastPrompt = prompt;
       freshState.nextTickAt = undefined;
-      if (freshState.active) writeState(ctx, freshState);
+      if (freshState.active) {
+        writeState(ctx, freshState);
+        appendLoopEntry(ctx, {
+          version: 1,
+          kind: "tick_started",
+          timestamp: freshState.lastTickAt,
+          state: { active: freshState.active, iteration: freshState.iteration, lastTickAt: freshState.lastTickAt },
+          activeTaskCount: getActiveTasks(ctx).length,
+        });
+      }
       updateStatus(ctx);
       if (ctx.isIdle()) {
         pi.sendUserMessage(prompt);
@@ -449,6 +644,21 @@ export default function taskLoop(pi: ExtensionAPI) {
         message = `Concluded active task list: ${reason}`;
       }
 
+      if (action !== "list") {
+        appendLoopEntry(ctx, {
+          version: 1,
+          kind: "task_snapshot",
+          timestamp: nowIso(),
+          detail: action,
+          activeTaskCount: nextTasks.filter((task) => task.status !== "done").length,
+          state: {
+            active: readState(ctx).active,
+            iteration: readState(ctx).iteration,
+            nextTickAt: readState(ctx).nextTickAt,
+          },
+        });
+      }
+
       updateStatus(ctx);
       return {
         content: [{ type: "text", text: message || "OK" }],
@@ -474,6 +684,14 @@ export default function taskLoop(pi: ExtensionAPI) {
         state.active = true;
         state.lastStopReason = null;
         writeState(ctx, state);
+        appendLoopEntry(ctx, {
+          version: 1,
+          kind: "command",
+          timestamp: nowIso(),
+          detail: "on",
+          state: { active: true, iteration: state.iteration, intervalSeconds: state.intervalSeconds },
+          activeTaskCount: getActiveTasks(ctx).length,
+        });
         updateStatus(ctx);
         queueTick(ctx, true);
         if (ctx.hasUI) ctx.ui.notify(`Task loop on (${formatInterval(state.intervalSeconds)})`, "info");
@@ -481,11 +699,27 @@ export default function taskLoop(pi: ExtensionAPI) {
       }
 
       if (cmd === "off") {
+        appendLoopEntry(ctx, {
+          version: 1,
+          kind: "command",
+          timestamp: nowIso(),
+          detail: "off",
+          state: { active: false, iteration: state.iteration },
+          activeTaskCount: getActiveTasks(ctx).length,
+        });
         stopLoop(ctx, "manual", true);
         return;
       }
 
       if (cmd === "once") {
+        appendLoopEntry(ctx, {
+          version: 1,
+          kind: "command",
+          timestamp: nowIso(),
+          detail: "once",
+          state: { active: state.active, iteration: state.iteration },
+          activeTaskCount: getActiveTasks(ctx).length,
+        });
         queueTick(ctx, true);
         if (ctx.hasUI) ctx.ui.notify("Queued one autonomous continuation tick", "info");
         return;
@@ -499,6 +733,14 @@ export default function taskLoop(pi: ExtensionAPI) {
         }
         state.intervalSeconds = seconds;
         writeState(ctx, state);
+        appendLoopEntry(ctx, {
+          version: 1,
+          kind: "command",
+          timestamp: nowIso(),
+          detail: `interval ${formatInterval(seconds)}`,
+          state: { active: state.active, iteration: state.iteration, intervalSeconds: state.intervalSeconds },
+          activeTaskCount: getActiveTasks(ctx).length,
+        });
         updateStatus(ctx);
         if (state.active) queueTick(ctx, false);
         if (ctx.hasUI) ctx.ui.notify(`Task loop interval set to ${formatInterval(seconds)}`, "info");
@@ -512,18 +754,27 @@ export default function taskLoop(pi: ExtensionAPI) {
           return;
         }
         writeLoopContext(ctx, value);
+        appendLoopEntry(ctx, {
+          version: 1,
+          kind: "command",
+          timestamp: nowIso(),
+          detail: "context",
+          state: { active: state.active, iteration: state.iteration },
+          activeTaskCount: getActiveTasks(ctx).length,
+        });
         if (ctx.hasUI) ctx.ui.notify("Task loop context updated", "info");
         return;
       }
 
       const tasks = readTasks(ctx);
       const activeCount = tasks.filter((task) => task.status !== "done").length;
-      const next = state.nextTickAt ? new Date(state.nextTickAt).toLocaleString() : "none";
+      const next = formatTimestamp(state.nextTickAt);
       const summary = [
         `active: ${state.active}`,
         `iteration: ${state.iteration}`,
         `interval: ${formatInterval(state.intervalSeconds)}`,
         `next tick: ${next}`,
+        `next in: ${formatRemaining(state.nextTickAt)}`,
         `tasks: ${tasks.length}`,
         `active tasks: ${activeCount}`,
         `last stop: ${state.lastStopReason ?? "none"}`,
@@ -534,6 +785,7 @@ export default function taskLoop(pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     updateStatus(ctx);
+    restartCountdown(ctx);
     const state = readState(ctx);
     if (state.active) queueTick(ctx, false);
   });
@@ -563,5 +815,7 @@ export default function taskLoop(pi: ExtensionAPI) {
 
   pi.on("session_shutdown", async () => {
     clearTimer();
+    clearCountdown();
+    clearWidgetTimer();
   });
 }

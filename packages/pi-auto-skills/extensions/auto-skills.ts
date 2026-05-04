@@ -37,10 +37,12 @@ type ReviewRuntimeState = {
   reviewQueued: boolean;
   inReviewTurn: boolean;
   reviewCompletedForRun: boolean;
+  reloadQueued: boolean;
   toolCalls: number;
   readCount: number;
   writeCount: number;
   toolErrors: number;
+  providerErrors: number;
   hadRecovery: boolean;
   toolNames: Set<string>;
   touchedPaths: Set<string>;
@@ -56,10 +58,12 @@ function createEmptyState(): ReviewRuntimeState {
     reviewQueued: false,
     inReviewTurn: false,
     reviewCompletedForRun: false,
+    reloadQueued: false,
     toolCalls: 0,
     readCount: 0,
     writeCount: 0,
     toolErrors: 0,
+    providerErrors: 0,
     hadRecovery: false,
     toolNames: new Set(),
     touchedPaths: new Set(),
@@ -69,7 +73,9 @@ function createEmptyState(): ReviewRuntimeState {
   };
 }
 
-function queueRuntimeReload(pi: ExtensionAPI) {
+function queueRuntimeReload(pi: ExtensionAPI, state: ReviewRuntimeState) {
+  if (state.reloadQueued) return;
+  state.reloadQueued = true;
   pi.sendUserMessage("/autoskill-reload", { deliverAs: "followUp" });
 }
 
@@ -127,10 +133,12 @@ function resetRunState(state: ReviewRuntimeState, prompt: string) {
   state.reviewQueued = false;
   state.inReviewTurn = false;
   state.reviewCompletedForRun = false;
+  state.reloadQueued = false;
   state.toolCalls = 0;
   state.readCount = 0;
   state.writeCount = 0;
   state.toolErrors = 0;
+  state.providerErrors = 0;
   state.hadRecovery = false;
   state.toolNames.clear();
   state.touchedPaths.clear();
@@ -166,6 +174,27 @@ export default function autoSkillsExtension(pi: ExtensionAPI) {
       "Good skills include when to use, numbered steps, pitfalls, and verification steps.",
     ],
     parameters: TOOL_PARAMS,
+    renderCall(args) {
+      const action = typeof args?.action === "string" ? args.action : "manage";
+      const name = typeof args?.name === "string" ? args.name : "(unnamed)";
+      return {
+        type: "text",
+        text: `auto-skill ${action} ${name}`,
+        renderShell: "self",
+      };
+    },
+    renderResult(result) {
+      const details = (result?.details ?? {}) as Record<string, unknown>;
+      const lines = [`${result?.isError ? "error" : "ok"}: ${String(details.message ?? "auto-skill operation complete")}`];
+      if (typeof details.path === "string") lines.push(`path: ${details.path}`);
+      if (typeof details.strategy === "string") lines.push(`strategy: ${details.strategy}`);
+      if (typeof details.error === "string") lines.push(`detail: ${details.error}`);
+      return {
+        type: "text",
+        text: lines.join("\n"),
+        renderShell: "self",
+      };
+    },
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const action = params.action as Action;
       let result: Record<string, unknown>;
@@ -186,7 +215,7 @@ export default function autoSkillsExtension(pi: ExtensionAPI) {
         state.phase = state.inReviewTurn ? "review_done" : state.phase;
         persistReviewState(pi, state);
         if (ctx.hasUI) ctx.ui.notify(String(result.message), "info");
-        queueRuntimeReload(pi);
+        queueRuntimeReload(pi, state);
       }
 
       return {
@@ -274,9 +303,17 @@ export default function autoSkillsExtension(pi: ExtensionAPI) {
   pi.on("tool_execution_end", async (event) => {
     if (event.isError) {
       state.toolErrors += 1;
-    } else if (state.toolErrors > 0) {
+    } else if (state.toolErrors > 0 || state.providerErrors > 0) {
       state.hadRecovery = true;
     }
+  });
+
+  pi.on("after_provider_response", async (event) => {
+    if (event.status === 408 || event.status === 429 || event.status >= 500) {
+      state.providerErrors += 1;
+      return;
+    }
+    if (state.providerErrors > 0) state.hadRecovery = true;
   });
 
   pi.on("turn_end", async (event) => {
@@ -311,6 +348,7 @@ export default function autoSkillsExtension(pi: ExtensionAPI) {
       writeCount: state.writeCount,
       readCount: state.readCount,
       toolErrors: state.toolErrors,
+      providerErrors: state.providerErrors,
       hadRecovery: state.hadRecovery,
       turnCount: state.turnCount,
     });
@@ -322,6 +360,7 @@ export default function autoSkillsExtension(pi: ExtensionAPI) {
       writeCount: state.writeCount,
       touchedPaths: Array.from(state.touchedPaths),
       toolErrors: state.toolErrors,
+      providerErrors: state.providerErrors,
       hadRecovery: state.hadRecovery,
       turnCount: state.turnCount,
       meaningfulAssistantTurns: state.meaningfulAssistantTurns,

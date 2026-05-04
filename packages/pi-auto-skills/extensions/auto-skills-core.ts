@@ -17,6 +17,7 @@ export interface ReviewSignals {
   writeCount: number;
   touchedPaths: string[];
   toolErrors: number;
+  providerErrors?: number;
   hadRecovery: boolean;
   turnCount: number;
   meaningfulAssistantTurns: number;
@@ -314,6 +315,7 @@ export function hashReviewFingerprint(input: {
   writeCount: number;
   readCount: number;
   toolErrors: number;
+  providerErrors?: number;
   hadRecovery: boolean;
   turnCount: number;
 }) {
@@ -325,6 +327,7 @@ export function hashReviewFingerprint(input: {
     writeCount: input.writeCount,
     readCount: input.readCount,
     toolErrors: input.toolErrors,
+    providerErrors: input.providerErrors ?? 0,
     hadRecovery: input.hadRecovery,
     turnCount: input.turnCount,
   });
@@ -332,17 +335,19 @@ export function hashReviewFingerprint(input: {
 }
 
 export function shouldTriggerAutoSkillReview(signals: ReviewSignals) {
+  const errorSignals = signals.toolErrors + (signals.providerErrors ?? 0);
+
   const substantialExecution =
     signals.toolCalls >= 5 ||
     (signals.writeCount >= 1 && signals.readCount >= 2) ||
     signals.touchedPaths.length >= 2 ||
-    (signals.toolErrors >= 1 && signals.hadRecovery) ||
+    (errorSignals >= 1 && signals.hadRecovery) ||
     (signals.turnCount >= 2 && signals.toolCalls >= 2);
 
   const plausibleReuse =
     (signals.writeCount >= 1 && signals.readCount >= 2) ||
     signals.touchedPaths.length >= 2 ||
-    (signals.toolErrors >= 1 && signals.hadRecovery) ||
+    (errorSignals >= 1 && signals.hadRecovery) ||
     signals.meaningfulAssistantTurns >= 2;
 
   return substantialExecution && plausibleReuse && !signals.autoskillUsed;

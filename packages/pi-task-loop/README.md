@@ -51,7 +51,7 @@ Reload if Pi already running:
 
 ## Current behavior
 
-When loop is on, the extension schedules a timer. On each tick it sends a compact continuation prompt telling Pi to resume established work from `.agent/progress.md` and canonical task state managed by `task_loop_tasks`. Concluding the current batch archives tasks to `.agent/tasks-history.json` and clears the active list.
+When loop is on, the extension schedules a timer. On each tick it sends a compact continuation prompt telling Pi to resume established work from `.agent/progress.md` and canonical task state managed by `task_loop_tasks`. Concluding the current batch archives tasks to `.agent/tasks-history.json` and clears the active list. If the loop stops because all remaining tasks are already `done`, it now auto-archives that completed list and clears `.agent/tasks.json` for you.
 
 `task_loop_tasks` is intentionally forgiving on input shape so first-tick tool use succeeds more often. It accepts common aliases like `add`, `update`, `complete`, `finish`, `replace`, `taskId`, `task_id`, `name`, nested `task`, and status variants like `in-progress` or `completed`.
 

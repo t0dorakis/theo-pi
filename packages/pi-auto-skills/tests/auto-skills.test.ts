@@ -134,6 +134,7 @@ test("review fingerprint is stable regardless of ordering", () => {
     writeCount: 1,
     readCount: 3,
     toolErrors: 0,
+    providerErrors: 0,
     hadRecovery: false,
     turnCount: 2,
   });
@@ -145,6 +146,7 @@ test("review fingerprint is stable regardless of ordering", () => {
     writeCount: 1,
     readCount: 3,
     toolErrors: 0,
+    providerErrors: 0,
     hadRecovery: false,
     turnCount: 2,
   });
@@ -159,6 +161,7 @@ test("shouldTriggerAutoSkillReview requires substantial reusable work", () => {
       writeCount: 1,
       touchedPaths: ["README.md", "package.json"],
       toolErrors: 0,
+      providerErrors: 0,
       hadRecovery: false,
       turnCount: 2,
       meaningfulAssistantTurns: 2,
@@ -174,6 +177,7 @@ test("shouldTriggerAutoSkillReview requires substantial reusable work", () => {
       writeCount: 0,
       touchedPaths: ["README.md"],
       toolErrors: 0,
+      providerErrors: 0,
       hadRecovery: false,
       turnCount: 1,
       meaningfulAssistantTurns: 1,
@@ -191,12 +195,31 @@ test("shouldTriggerAutoSkillReview stays false once autoskill tool was already u
       writeCount: 2,
       touchedPaths: ["README.md", "extensions/auto-skills.ts"],
       toolErrors: 1,
+      providerErrors: 1,
       hadRecovery: true,
       turnCount: 3,
       meaningfulAssistantTurns: 2,
       autoskillUsed: true,
     }),
     false,
+  );
+});
+
+test("shouldTriggerAutoSkillReview counts provider recovery as reusable learning signal", () => {
+  assert.equal(
+    shouldTriggerAutoSkillReview({
+      toolCalls: 2,
+      readCount: 1,
+      writeCount: 0,
+      touchedPaths: ["extensions/auto-skills.ts", "README.md"],
+      toolErrors: 0,
+      providerErrors: 2,
+      hadRecovery: true,
+      turnCount: 2,
+      meaningfulAssistantTurns: 2,
+      autoskillUsed: false,
+    }),
+    true,
   );
 });
 

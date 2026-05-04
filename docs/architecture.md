@@ -22,9 +22,13 @@ execution plane
   |     - /jobs/<id>/events exposes event-log records for ACP adapter polling
   |     - /jobs/<id>/cancel writes cross-process cancel markers
   |
-  +-- Telegram bot: scripts/vm/pi-worker-telegram-bot.ts
+  +-- Telegram poller: scripts/vm/pi-worker-telegram-bot.ts
   |     - commands enqueue numeric-chat jobs
-  |     - delivers completed numeric-chat jobs
+  |     - handles status/reset/restart/log/checkpoint commands
+  |
+  +-- Telegram runner: scripts/vm/pi-worker-telegram-runner.ts
+  |     - claims numeric-chat jobs
+  |     - sends typing heartbeats and delivers final answers
   |
   +-- ACP stdio adapter: scripts/vm/pi-worker-acp-stdio.ts
   |     - speaks official ACP over stdin/stdout via @agentclientprotocol/sdk

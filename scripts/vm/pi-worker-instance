@@ -15,8 +15,10 @@ SMART_SYNC_FILES=(
   "scripts/vm/pi-worker-submit-job.ts"
   "scripts/vm/pi-worker-gateway.ts"
   "scripts/vm/pi-worker-telegram-bot.ts"
+  "scripts/vm/pi-worker-telegram-runner.ts"
   "scripts/vm/pi-worker-gateway"
   "scripts/vm/pi-worker-telegram-bot"
+  "scripts/vm/pi-worker-telegram-runner"
   "scripts/vm/pi-worker-run-job"
   "scripts/vm/pi-worker-submit-job"
   "scripts/vm/pi-worker-acpx-smoke-test"
@@ -59,7 +61,7 @@ PY
 ); token=\$(cat ~/.pi-worker/gateway-token); tmux kill-session -t theo-pi-gateway >/dev/null 2>&1 || true; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-gateway \"source ~/.env.pi 2>/dev/null || true; export PI_WORKER_GATEWAY_TOKEN=\$token; ~/bin/pi-worker-gateway\""
       ;;
     bot)
-      run_vm "tmux kill-session -t theo-pi-telegram-bot >/dev/null 2>&1 || true; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-telegram-bot 'source ~/.env.pi 2>/dev/null || true; ~/bin/pi-worker-telegram-bot'"
+      run_vm "tmux kill-session -t theo-pi-telegram-bot >/dev/null 2>&1 || true; tmux kill-session -t theo-pi-telegram-runner >/dev/null 2>&1 || true; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-telegram-bot 'source ~/.env.pi 2>/dev/null || true; ~/bin/pi-worker-telegram-bot'; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-telegram-runner 'source ~/.env.pi 2>/dev/null || true; ~/bin/pi-worker-telegram-runner'"
       ;;
     supervisor)
       run_vm "~/bin/pi-worker-restart '$SESSION'"
@@ -76,7 +78,7 @@ PY
 }
 
 status_cmd() {
-  run_vm "echo 'tmux sessions'; tmux ls 2>/dev/null || true; echo; echo 'worker status'; ~/bin/pi-worker-status '$SESSION' --json 2>/dev/null || true; echo; echo 'active runners'; ps -ef | grep -E 'pi-worker-run-job|pi-worker-gateway|pi-worker-telegram-bot' | grep -v grep || true; echo; echo 'latest telegram job'; latest=\$(ls -t ~/.pi-worker/telegram/jobs/*.json 2>/dev/null | head -n 1); [ -n \"\$latest\" ] && jq . \"\$latest\" || true; echo; echo 'latest result'; latest=\$(ls -t ~/.pi-worker/jobs/results/*.json 2>/dev/null | head -n 1); [ -n \"\$latest\" ] && jq . \"\$latest\" || true"
+  run_vm "echo 'tmux sessions'; tmux ls 2>/dev/null || true; echo; echo 'worker status'; ~/bin/pi-worker-status '$SESSION' --json 2>/dev/null || true; echo; echo 'active runners'; ps -ef | grep -E 'pi-worker-run-job|pi-worker-gateway|pi-worker-telegram-bot|pi-worker-telegram-runner' | grep -v grep || true; echo; echo 'latest telegram job'; latest=\$(ls -t ~/.pi-worker/telegram/jobs/*.json 2>/dev/null | head -n 1); [ -n \"\$latest\" ] && jq . \"\$latest\" || true; echo; echo 'latest result'; latest=\$(ls -t ~/.pi-worker/jobs/results/*.json 2>/dev/null | head -n 1); [ -n \"\$latest\" ] && jq . \"\$latest\" || true"
 }
 
 logs_cmd() {
@@ -86,7 +88,7 @@ logs_cmd() {
       run_vm "tmux capture-pane -pt theo-pi-gateway:0 -S -120"
       ;;
     bot)
-      run_vm "tmux capture-pane -pt theo-pi-telegram-bot:0 -S -120"
+      run_vm "echo 'telegram poller'; tmux capture-pane -pt theo-pi-telegram-bot:0 -S -80 2>/dev/null || true; echo; echo 'telegram runner'; tmux capture-pane -pt theo-pi-telegram-runner:0 -S -80 2>/dev/null || true"
       ;;
     supervisor)
       run_vm "tail -n 120 ~/.pi-worker/supervisor.log 2>/dev/null || true"
@@ -150,7 +152,7 @@ sync_cmd() {
     if printf '%s\n' "${existing[@]}" | grep -q 'pi-worker-gateway'; then
       restart_target gateway
     fi
-    if printf '%s\n' "${existing[@]}" | grep -q 'pi-worker-telegram-bot\|pi-worker-run-job\|pi-worker-submit-job\|scripts/vm/lib'; then
+    if printf '%s\n' "${existing[@]}" | grep -q 'pi-worker-telegram-bot\|pi-worker-telegram-runner\|pi-worker-run-job\|pi-worker-submit-job\|scripts/vm/lib'; then
       restart_target bot
     fi
   fi
