@@ -1,4 +1,4 @@
-import { appendFile, mkdir } from "node:fs/promises"
+import { appendFile, mkdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 
 import { getRuntimePaths } from "./paths"
@@ -21,7 +21,8 @@ export function createAcpxEventLog(stateDir: string) {
 
   async function append(jobId: string, attempt: AcpxJobEventLogRecord["attempt"], event: unknown) {
     await mkdir(paths.jobEventsDir, { recursive: true })
-    const seq = (counters.get(jobId) ?? 0) + 1
+    const previousSeq = counters.get(jobId) ?? await lastSeq(eventPath(jobId))
+    const seq = previousSeq + 1
     counters.set(jobId, seq)
     const record: AcpxJobEventLogRecord = {
       seq,
@@ -37,4 +38,20 @@ export function createAcpxEventLog(stateDir: string) {
     eventPath,
     append,
   }
+}
+
+async function lastSeq(path: string) {
+  const content = await readFile(path, "utf8").catch(() => "")
+  const lines = content.trimEnd().split("\n")
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index]?.trim()
+    if (!line) continue
+    try {
+      const record = JSON.parse(line) as { seq?: unknown }
+      if (typeof record.seq === "number" && Number.isFinite(record.seq)) return record.seq
+    } catch {
+      continue
+    }
+  }
+  return 0
 }
