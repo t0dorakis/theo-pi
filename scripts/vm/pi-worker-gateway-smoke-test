@@ -103,6 +103,14 @@ JOB_RESPONSE="$(curl_json "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/jobs/${JOB
 echo "$JOB_RESPONSE" | jq -e --arg id "$JOB_ID" '.ok == true and .job.id == $id and .job.backend == "acpx"' >/dev/null || fail 'job endpoint'
 pass 'job endpoint'
 
+EVENTS_RESPONSE="$(curl_json "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/jobs/${JOB_ID}/events?after=0")"
+echo "$EVENTS_RESPONSE" | jq -e --arg id "$JOB_ID" '.ok == true and .jobId == $id and (.events | type == "array")' >/dev/null || fail 'job events endpoint'
+pass 'job events endpoint'
+
+CANCEL_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/jobs/${JOB_ID}/cancel")"
+echo "$CANCEL_RESPONSE" | jq -e --arg id "$JOB_ID" '.ok == true and .status == "cancel_requested" and .id == $id' >/dev/null || fail 'job cancel endpoint'
+pass 'job cancel endpoint'
+
 if [[ "${PI_WORKER_GATEWAY_RESET_SMOKE:-0}" == "1" ]]; then
   RESET_RESPONSE="$(curl_json -X POST "http://127.0.0.1:${PI_WORKER_GATEWAY_PORT}/reset" -H 'content-type: application/json' -d '{"chatId":"smoke-gateway"}')"
   echo "$RESET_RESPONSE" | jq -e '.ok == true and .status == "reset" and .chatId == "smoke-gateway"' >/dev/null || fail 'reset endpoint'

@@ -18,11 +18,18 @@ execution plane
   +-- HTTP gateway: scripts/vm/pi-worker-gateway.ts
   |     - /run enqueues non-Telegram jobs
   |     - /health includes worker status + ACPX health
-  |     - /reset closes ACP sessions and writes cancel markers
+  |     - /reset closes inner ACP sessions and writes cancel markers
+  |     - /jobs/<id>/events exposes event-log records for ACP adapter polling
+  |     - /jobs/<id>/cancel writes cross-process cancel markers
   |
   +-- Telegram bot: scripts/vm/pi-worker-telegram-bot.ts
   |     - commands enqueue numeric-chat jobs
   |     - delivers completed numeric-chat jobs
+  |
+  +-- ACP stdio adapter: scripts/vm/pi-worker-acp-stdio.ts
+  |     - speaks official ACP over stdin/stdout via @agentclientprotocol/sdk
+  |     - lets acpx spawn the worker with --agent
+  |     - maps outer ACP sessions to non-numeric acp-* chat IDs
   |
   +-- CLI: scripts/vm/pi-worker-submit-job.ts / pi-worker-run-job.ts
         - submit creates queue records
@@ -112,6 +119,19 @@ Telegram /run <prompt>
   -> bot delivers final answer for numeric chat id
 ```
 
+### ACP stdio adapter flow
+
+```text
+acpx --agent "bun scripts/vm/pi-worker-acp-stdio.ts" "fix failing tests"
+  -> ACP initialize/session.new/session.prompt over stdio
+  -> adapter POSTs /run with chatId = acp-<uuid>
+  -> adapter polls /jobs/<jobId>/events and maps records to ACP session/update
+  -> adapter polls /jobs/<jobId> for terminal queue status
+  -> adapter returns ACP PromptResponse { stopReason }
+```
+
+The adapter uses official ACP schema at the external boundary. Gateway JSON endpoints remain pi-worker internals.
+
 ### Reset / cancel flow
 
 ```text
@@ -183,6 +203,7 @@ Failure artifact:
 Stable now:
 
 - ACPX-only job execution
+- ACP-compatible stdio adapter smoke path for `acpx --agent "bun scripts/vm/pi-worker-acp-stdio.ts" ...`
 - queue as lifecycle authority
 - result-channel request/result/event artifacts
 - per-session turn locking
@@ -193,6 +214,7 @@ Stable now:
 
 Still intentionally unfinished:
 
+- richer ACP conformance suite beyond stdio smoke
 - Telegram streaming of structured ACPX events
 - Bun-native daemon replacing tmux operator plane
 - state directory rename from `telegram/jobs/` to `jobs/queue/`

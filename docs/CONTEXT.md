@@ -1,6 +1,6 @@
 # Pi Worker Context
 
-Pi worker runs queued prompts from HTTP, Telegram, or CLI through ACPX. Plans under `docs/plans/` describe history; this file describes current branch reality.
+Pi worker runs queued prompts from HTTP, Telegram, CLI, or an ACP-compatible stdio adapter through ACPX. Plans under `docs/plans/` describe history; this file describes current branch reality.
 
 ## Language
 
@@ -21,12 +21,16 @@ Queued prompt that produces one answer envelope.
 _Avoid_: Task, run, request
 
 **Turn**:
-One `AcpxRuntime.startTurn` call inside an **ACP session**.
+One `AcpxRuntime.startTurn` call inside an **Inner ACP session**.
 _Avoid_: Job
 
-**ACP session**:
+**Outer ACP session**:
+Session created by an external ACP client against the `theo-pi` stdio adapter; its `sessionId` maps to a non-numeric `chatId`.
+_Avoid_: ACPX session, Worker session
+
+**Inner ACP session**:
 Conversation state owned by ACPX for one agent and session key.
-_Avoid_: Worker session, tmux session, Telegram session
+_Avoid_: Outer ACP session, Worker session, tmux session, Telegram session
 
 **Session key**:
 ACPX conversation key: `${agent}-${chatId}` for persistent mode, `${jobId}` for oneshot mode.
@@ -57,12 +61,13 @@ Process-control layer for start, stop, status, restart, checkpoint, and logs.
 _Avoid_: Execution plane
 
 **Execution plane**:
-Gateway, Telegram bot, worker runner, queue, result channel, and ACPX runtime adapter.
+Gateway, Telegram bot, ACP stdio adapter, worker runner, queue, result channel, and ACPX runtime adapter.
 _Avoid_: Operator plane
 
 ## Relationships
 
 - A **Worker** has one **Worker name**.
+- An **Outer ACP session** maps to one non-numeric **Chat**.
 - A **Job** maps to exactly one ACPX **Turn** today.
 - A persistent **Job** uses one **Session key** shared by all jobs in the same **Chat** and **Agent**.
 - A oneshot **Job** uses its own **Session key** equal to `jobId`.
@@ -78,7 +83,7 @@ _Avoid_: Operator plane
 - Same-chat persistent turns are serialized with `acpx-turn-${agent}-${chatId}`.
 - Oneshot turns lock by `acpx-turn-${jobId}`.
 - Numeric `chatId` values are reserved for Telegram delivery.
-- Non-numeric `chatId` values are queue-only; gateway-generated IDs use `gateway-${uuid}`.
+- Non-numeric `chatId` values are queue-only; gateway-generated IDs use `gateway-${uuid}` and ACP adapter IDs use `acp-${uuid}`.
 - Cross-process file locks use `O_EXCL` because gateway, Telegram, CLI, and run-job subprocesses can touch the same state.
 - `backendId: "acpx"` is retained only as metadata; there is no backend registry.
 
@@ -108,10 +113,10 @@ _Avoid_: Operator plane
 > **Domain expert:** "No. Telegram creates a **Job** in the **Queue**. The runner claims that job, starts one ACPX **Turn**, writes **Result channel** artifacts, then marks the **Queue** done or failed."
 >
 > **Dev:** "Can two messages in the same chat run concurrently?"
-> **Domain expert:** "No. Persistent **ACP sessions** serialize by **Session key** so chat context stays ordered. Different chats can run independently."
+> **Domain expert:** "No. Persistent **Inner ACP sessions** serialize by **Session key** so chat context stays ordered. Different chats can run independently."
 
 ## Flagged ambiguities
 
-- "session" used to mean worker process, tmux session, Telegram chat, ACP session, and ACP protocol id. Resolution: reserve **ACP session** for ACPX conversation state; use **Worker** and **Worker name** for process state.
+- "session" used to mean worker process, tmux session, Telegram chat, outer ACP session, inner ACP session, and ACP protocol id. Resolution: use **Outer ACP session** for external client state, **Inner ACP session** for ACPX conversation state, and **Worker** / **Worker name** for process state.
 - "backend" used to imply a pluggable execution registry. Resolution: use **Runtime adapter** for the ACPX bridge and keep `backendId` only as artifact metadata.
 - "runtime" used for Bun, ACPX, and daemon state. Resolution: prefer **ACPX runtime** for `AcpxRuntime`, **Worker env** for config, and **Worker daemon status** for process health.

@@ -159,6 +159,12 @@ export async function runQueuedJob(jobId: string, env: WorkerEnv = getWorkerEnv(
   }
 }
 
+export async function requestCancelJob(jobId: string, reason = "cancel requested", env: WorkerEnv = getWorkerEnv()) {
+  const paths = getRuntimePaths(env.stateDir, import.meta.url)
+  await mkdir(paths.jobCancelsDir, { recursive: true })
+  await writeFile(cancelPath(env, jobId), `${reason} ${new Date().toISOString()}\n`, "utf8")
+}
+
 export async function requestCancelJobsForChat(chatId: string, env: WorkerEnv = getWorkerEnv()) {
   const queue = createJobQueue(env.stateDir, { backend: "acpx" })
   const paths = getRuntimePaths(env.stateDir, import.meta.url)
@@ -166,7 +172,7 @@ export async function requestCancelJobsForChat(chatId: string, env: WorkerEnv = 
   const jobs = await queue.listJobs()
   const running = jobs.filter((job) => job.chatId === chatId && job.status === "running")
   for (const job of running) {
-    await writeFile(cancelPath(env, job.id), `reset requested ${new Date().toISOString()}\n`, "utf8")
+    await requestCancelJob(job.id, "reset requested", env)
   }
   return running.map((job) => job.id)
 }

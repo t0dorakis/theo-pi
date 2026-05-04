@@ -1,44 +1,26 @@
 # Agent Progress
 
 ## Current objective
-- Keep pi-worker ACPX runtime current, documented, and linguistically consistent.
+- Commit ACP-compatible VM delegation adapter and review branch through the VM dogfood path.
 
 ## Latest completed work
-- Removed backend abstraction layer and deleted smolvm + tmux execution backends from worker runtime path.
-- Added `scripts/vm/lib/worker-runner.ts` as acpx-only queue runner.
-- Reworked gateway `/run` to enqueue jobs and drain non-Telegram queue jobs through a single logged runner instead of delegating to tmux or spawning unbounded runners.
-- Replaced global acpx runner lock with per-session turn lock, added duplicate-running-job guard, stale lock cleanup, and lease heartbeats during acpx execution.
-- Reworked submit/bot paths to stamp jobs as `acpx`; Telegram bot now skips non-numeric gateway jobs.
-- Added `scripts/vm/lib/acpx-event-log.ts` and wired normalized ACPX events to `~/.pi-worker/jobs/events/<jobId>.ndjson`.
-- Added AbortSignal timeout/cancel wiring for `runtime.startTurn`; timers are unref'd.
-- Added `/reset` for gateway and Telegram through cancel markers plus `runtime.close({ discardPersistentState: true })`.
-- Updated gateway smoke so `npm run test:vm` still exercises non-supervisor gateway endpoints without tmux; supervisor-only endpoints remain explicitly skipped.
-- Fixed empty-answer state divergence by overwriting result-channel status to failed when worker-runner fails empty output.
-- Avoided worker-runner clobbering existing backend result files in catch path.
-- Added repeatable real smoke: `scripts/vm/pi-worker-acpx-smoke-test` plus host helper `scripts/vm/pi-worker-instance smoke-acpx`.
-- Patched smoke/verify/bootstrap docs and wrappers for acpx-only path.
-- Fixed OrbStack ACPX failures caused by placeholder exported API keys in `~/.env.pi`.
-- Patched `pi-worker-instance` defaults to current OrbStack VM/repo path.
-- Added current `docs/CONTEXT.md`, `docs/glossary.md`, and ADRs for ACPX-only execution, queue authority, ACP session locks, chatId routing, and per-session turn locks.
-- Rewrote `docs/architecture.md` to describe ACPX runtime adapter, queue/result-channel split, current state layout, reset/cancel, and remaining work.
-- Renamed worker-domain types/fields from session-oriented names to worker-oriented names: `WorkerEnv`, `WorkerState`, `WorkerDaemonStatus`, `workerName`, and `workspacePath`.
-- Renamed ACPX adapter from `lib/backends/acpx-backend.ts` to `lib/acpx/runtime-adapter.ts` and updated tests/imports.
-- Marked ACPX roadmap/PR plan docs with status headers.
+- Added ACP-compatible stdio adapter for theo-pi VM delegation.
+- Added gateway job event polling and cancel endpoints for ACP adapter streaming/cancel.
+- Added `scripts/vm/pi-worker-acp` dogfood wrapper with token provisioning, gateway restart, stable chat id, result retrieval, cancel, and status commands.
+- Disabled incomplete ACP tool-call mapping for now; text-only streaming avoids invalid ACP updates during long reviews.
+- Added `npm run test:acp-adapter` and `npm run worker:acp`.
+- Updated docs/README for ACP adapter and dogfood workflow.
 
 ## Verification
 - `npm run check`
 - `npm run check:ts`
-- `bun test scripts/vm/lib/worker-runner.test.ts scripts/vm/lib/acpx/runtime-adapter-oneshot.test.ts scripts/vm/lib/acpx/runtime-adapter-persistent.test.ts scripts/vm/lib/state-store.test.ts scripts/vm/lib/health.test.ts scripts/vm/lib/result-channel.test.ts`
-- `npm run test:vm` (local tmux-less environment now runs gateway health/run/job/reset-validation/numeric-chatId checks; supervisor-only checks skip)
-- OrbStack sync: `bash scripts/vm/pi-worker-instance sync --restart all`
-- OrbStack acpx smoke: `bash scripts/vm/pi-worker-instance smoke-acpx naming-docs-final` → both queued jobs done, answers correct, persistent session file reused
-- OrbStack event log inspection showed `session_ready`, `status`, `text_delta`, and `turn_result` records for latest jobs.
-- prior guest gateway smoke: `/run` queued job, `/jobs/<id>` returned `status: done`, result file answer `7`
+- `npm run test:acp-adapter`
+- `npm run test:vm`
+- VM wrapper smoke: `bash scripts/vm/pi-worker-acp "Reply exactly: fixed chat ok"`
+- VM result retrieval: `bash scripts/vm/pi-worker-acp result`
 
 ## Next best step
-- Continue Task 21: stream ACPX structured events to Telegram from the new event log/live runtime event path.
+- Commit current branch, sync to VM, then request full branch review from the VM via `scripts/vm/pi-worker-acp`.
 
 ## Blockers
-- Local host lacks `tmux`, so legacy supervisor/gateway temp-HOME smokes are skipped rather than exercised.
-- Could not re-run gateway curl smoke in this session because guest `~/.env.pi` did not expose `PI_WORKER_GATEWAY_TOKEN` to non-interactive shell command.
-- Full removal of tmux-based process management remains future cleanup; execution path is acpx-only.
+- None.

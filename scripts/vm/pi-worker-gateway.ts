@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
 import { execFile } from "node:child_process"
 import { randomUUID } from "node:crypto"
-import { appendFile, mkdir } from "node:fs/promises"
+import { appendFile, mkdir, readFile } from "node:fs/promises"
 import { promisify } from "node:util"
 
 import { getWorkerEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
-import { getScriptDir, localScript } from "./lib/paths"
+import { getRuntimePaths, getScriptDir, localScript } from "./lib/paths"
 import { createStateStore } from "./lib/state-store"
-import { getAcpxRuntimeHealth, requestCancelJobsForChat, resetWorkerChatSession } from "./lib/worker-runner"
+import { getAcpxRuntimeHealth, requestCancelJob, requestCancelJobsForChat, resetWorkerChatSession } from "./lib/worker-runner"
 
 const execFileAsync = promisify(execFile)
 const env = getWorkerEnv()
@@ -24,6 +24,7 @@ const telegramWebhookSecret = env.telegramWebhookSecret
 const telegramToken = env.telegramBotToken
 const telegramAllowedChats = env.telegramAllowedChatIds
 const logsLines = env.telegramLogLines
+const runtimePaths = getRuntimePaths(env.stateDir, import.meta.url)
 const runnerLogPath = `${env.stateDir}/jobs/runner.log`
 let queueWorkerActive = false
 
@@ -267,6 +268,27 @@ const server = Bun.serve({
         }
         const job = await enqueuePrompt(chatId, prompt)
         return json({ ok: true, status: "queued", id: job.id, chatId: job.chatId })
+      }
+
+      const eventsMatch = url.pathname.match(/^\/jobs\/([^/]+)\/events$/)
+      if (request.method === "GET" && eventsMatch) {
+        const jobId = decodeURIComponent(eventsMatch[1])
+        const after = Number.parseInt(url.searchParams.get("after") ?? "0", 10)
+        const content = await readFile(`${runtimePaths.jobEventsDir}/${jobId}.ndjson`, "utf8").catch(() => "")
+        const events = content.split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as { seq?: number })
+          .filter((record) => typeof record.seq === "number" && record.seq > after)
+        return json({ ok: true, jobId, events })
+      }
+
+      const cancelMatch = url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/)
+      if (request.method === "POST" && cancelMatch) {
+        const jobId = decodeURIComponent(cancelMatch[1])
+        const job = await queue.getJob(jobId)
+        if (!job) return json({ ok: false, error: "job not found" }, { status: 404 })
+        await requestCancelJob(jobId, "gateway cancel", env)
+        return json({ ok: true, status: "cancel_requested", id: jobId })
       }
 
       if (request.method === "GET" && url.pathname.startsWith("/jobs/")) {

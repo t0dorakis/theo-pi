@@ -141,6 +141,8 @@ For Theo's local Linux VM worker setup, repo includes:
 - `scripts/vm/pi-worker-supervisor-smoke-test` — temp-HOME smoke test for supervisor start/status/kill/restart/stop behavior
 - `scripts/vm/pi-worker-gateway-smoke-test` — temp-HOME smoke test for Bun gateway queue endpoints
 - `scripts/vm/pi-worker-acpx-smoke-test` — repeatable real acpx smoke: enqueue job, run it, assert queue/result/ACP session state
+- `scripts/vm/pi-worker-acp` — dogfood CLI for agent-to-VM delegation over ACPX (`run`, `result`, `cancel`, `status`)
+- `scripts/vm/pi-worker-acp-stdio.ts` — ACP-compatible stdio adapter used by `acpx --agent`
 - `templates/pi-worker/` — starter `settings.json`, `.env`, and SSH hardening snippets
 
 ACPX worker quick start:
@@ -152,6 +154,24 @@ export ACPX_AGENT=pi
 export ACPX_SESSION_MODE=persistent
 export ACPX_CWD="$PWD"
 ./scripts/vm/pi-worker-supervisor start theo-pi "$PWD"
+```
+
+Dogfood delegation from host to VM:
+
+```bash
+bash scripts/vm/pi-worker-acp "review this branch"
+bash scripts/vm/pi-worker-acp result
+bash scripts/vm/pi-worker-acp cancel
+```
+
+The wrapper prints job id, chat id, status, and exact retrieval/cancel commands so an orchestrating agent does not need to infer queue internals.
+
+Raw ACP adapter path:
+
+```bash
+THEO_PI_GATEWAY_URL=http://127.0.0.1:8787 \
+THEO_PI_GATEWAY_TOKEN=... \
+acpx --agent "bun scripts/vm/pi-worker-acp-stdio.ts" exec "review this branch"
 ```
 
 Repeatable real smoke on configured machine/VM:
