@@ -53,7 +53,7 @@ export function createJobQueue(stateDir: string, options?: { leaseDurationSecond
     },
     async claimNextJob(leaseOwner: string, claimedAt: string = nowIso()) {
       const jobs = await allJobs()
-      const next = jobs.find((job) => job.status === "pending" && !job.telegramDeliveredAt && /^\d+$/.test(job.chatId))
+      const next = jobs.find((job) => job.status === "pending" && !job.telegramDeliveredAt && /^-?\d+$/.test(job.chatId))
       if (!next) return null
       next.status = "running"
       next.startedAt = next.startedAt ?? claimedAt

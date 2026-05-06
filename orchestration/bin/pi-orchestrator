@@ -1,0 +1,229 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ORCH_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="$(cd "$ORCH_DIR/.." && pwd)"
+PROFILES_DIR="$ORCH_DIR/profiles"
+
+PROFILE=""
+VM_OVERRIDE=""
+LOCAL_OVERRIDE=""
+REMOTE_OVERRIDE=""
+REMOTE_ARCHIVE=""
+declare -a ARGS=()
+
+usage() {
+  cat <<'EOF'
+usage:
+  pi-orchestrator list
+  pi-orchestrator status --profile <name> [--vm <vm>] [--remote <path>]
+  pi-orchestrator redeploy --profile <name> [--vm <vm>] [--local <path>] [--remote <path>]
+  pi-orchestrator acp --profile <name> "prompt..."
+
+Profiles live in orchestration/profiles/*.json.
+EOF
+}
+
+json_get() {
+  local file="$1"
+  local key="$2"
+  jq -r --arg key "$key" '.[$key] // empty' "$file"
+}
+
+json_bool() {
+  local file="$1"
+  local key="$2"
+  jq -r --arg key "$key" '.[$key] // false' "$file"
+}
+
+profile_path() {
+  local name="$1"
+  printf '%s/%s.json' "$PROFILES_DIR" "$name"
+}
+
+require_profile() {
+  [[ -n "$PROFILE" ]] || { echo "missing --profile" >&2; exit 1; }
+  PROFILE_FILE="$(profile_path "$PROFILE")"
+  [[ -f "$PROFILE_FILE" ]] || { echo "profile not found: $PROFILE_FILE" >&2; exit 1; }
+  VM="${VM_OVERRIDE:-$(json_get "$PROFILE_FILE" vm)}"
+  LOCAL_WORKSPACE="${LOCAL_OVERRIDE:-$(json_get "$PROFILE_FILE" localWorkspace)}"
+  REMOTE_WORKSPACE="${REMOTE_OVERRIDE:-$(json_get "$PROFILE_FILE" remoteWorkspace)}"
+  AGENT="$(json_get "$PROFILE_FILE" agent)"
+  SESSION_MODE="$(json_get "$PROFILE_FILE" sessionMode)"
+  SYNC_CODEX_AUTH="$(json_bool "$PROFILE_FILE" syncCodexAuth)"
+  [[ -n "$VM" ]] || { echo "profile $PROFILE missing vm" >&2; exit 1; }
+  [[ -n "$REMOTE_WORKSPACE" ]] || { echo "profile $PROFILE missing remoteWorkspace" >&2; exit 1; }
+  [[ -n "$AGENT" ]] || AGENT="codex"
+  [[ -n "$SESSION_MODE" ]] || SESSION_MODE="persistent"
+}
+
+shell_quote() {
+  printf '%q' "$1"
+}
+
+run_vm() {
+  orbctl run -m "$VM" bash -lc "$1"
+}
+
+has_service() {
+  local svc="$1"
+  jq -e --arg svc "$svc" '(.services // []) | index($svc)' "$PROFILE_FILE" >/dev/null
+}
+
+parse_globals() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --profile) PROFILE="${2:-}"; shift 2 ;;
+      --vm) VM_OVERRIDE="${2:-}"; shift 2 ;;
+      --local) LOCAL_OVERRIDE="${2:-}"; shift 2 ;;
+      --remote) REMOTE_OVERRIDE="${2:-}"; shift 2 ;;
+      --help|-h) usage; exit 0 ;;
+      *) ARGS+=("$1"); shift ;;
+    esac
+  done
+}
+
+list_cmd() {
+  echo "profiles"
+  for file in "$PROFILES_DIR"/*.json; do
+    [[ -f "$file" ]] || continue
+    local name vm local remote status
+    name="$(json_get "$file" name)"
+    vm="$(json_get "$file" vm)"
+    local="$(json_get "$file" localWorkspace)"
+    remote="$(json_get "$file" remoteWorkspace)"
+    status="$(orbctl list 2>/dev/null | awk -v vm="$vm" '$1 == vm { print $2 }')"
+    [[ -n "$status" ]] || status="not-running-or-not-found"
+    printf '%s\tvm=%s\tstatus=%s\tlocal=%s\tremote=%s\n' "$name" "$vm" "$status" "$local" "$remote"
+  done
+}
+
+status_cmd() {
+  require_profile
+  PI_WORKER_VM_NAME="$VM" PI_WORKER_VM_REPO_DIR="$REMOTE_WORKSPACE" bash "$ROOT_DIR/scripts/vm/pi-worker-instance" status
+}
+
+sync_codex_auth() {
+  [[ "$SYNC_CODEX_AUTH" == "true" ]] || return 0
+  [[ "$AGENT" == "codex" ]] || return 0
+  [[ -f "$HOME/.codex/auth.json" && -f "$HOME/.codex/config.toml" ]] || {
+    echo "skip Codex auth sync: missing host ~/.codex/auth.json or config.toml" >&2
+    return 0
+  }
+  local tmp archive remote_archive
+  tmp="$(mktemp -d)"
+  archive="$(mktemp)"
+  remote_archive="/tmp/pi-orchestrator-codex-auth-$$-$RANDOM.tgz"
+  chmod 600 "$archive"
+  cp "$HOME/.codex/auth.json" "$HOME/.codex/config.toml" "$tmp"/
+  [[ -f "$HOME/.codex/version.json" ]] && cp "$HOME/.codex/version.json" "$tmp"/
+  (umask 077; tar -C "$tmp" -czf "$archive" .)
+  orbctl push -m "$VM" "$archive" "$remote_archive" >/dev/null
+  local q_remote_archive
+  q_remote_archive="$(shell_quote "$remote_archive")"
+  run_vm "set -euo pipefail; mkdir -p ~/.codex; tar -C ~/.codex -xzf $q_remote_archive; chmod 600 ~/.codex/auth.json ~/.codex/config.toml 2>/dev/null || true; rm -f $q_remote_archive"
+  rm -rf "$tmp" "$archive"
+}
+
+install_runtime_links() {
+  local q_remote
+  q_remote="$(shell_quote "$REMOTE_WORKSPACE")"
+  run_vm "set -euo pipefail
+    mkdir -p ~/bin ~/.pi/agent ~/.pi-worker
+    cd $q_remote
+    if [[ -f .pi/settings.json ]]; then ln -sf $q_remote/.pi/settings.json ~/.pi/agent/settings.json; fi
+    if [[ -f packages/pi-caveman/APPEND_SYSTEM.md ]]; then cp $q_remote/packages/pi-caveman/APPEND_SYSTEM.md ~/.pi/agent/APPEND_SYSTEM.md; fi
+    chmod +x scripts/vm/pi-worker-* scripts/vm/bootstrap-ubuntu-pi-worker.sh scripts/vm/install-theo-pi-worker.sh 2>/dev/null || true
+    for cmd in pi-worker-supervisor pi-worker-start pi-worker-status pi-worker-restart pi-worker-stop pi-worker-checkpoint pi-worker-tail-logs pi-worker-verify-runtime pi-worker-fail-inject pi-worker-runtime-checklist pi-worker-submit-job pi-worker-run-job pi-worker-gateway pi-worker-telegram-bot pi-worker-telegram-runner pi-worker-acp pi-worker-verify.sh pi-worker-supervisor-smoke-test pi-worker-gateway-smoke-test pi-worker-acpx-smoke-test; do
+      [[ -e $q_remote/scripts/vm/\"\$cmd\" ]] && ln -sf $q_remote/scripts/vm/\"\$cmd\" ~/bin/\"\$cmd\"
+    done"
+}
+
+write_worker_env() {
+  local q_agent q_session q_remote
+  q_agent="$(shell_quote "$AGENT")"
+  q_session="$(shell_quote "$SESSION_MODE")"
+  q_remote="$(shell_quote "$REMOTE_WORKSPACE")"
+  run_vm "set -euo pipefail
+    touch ~/.env.pi
+    upsert() { key=\"\$1\"; value=\"\$2\"; if grep -q \"^export \$key=\" ~/.env.pi; then sed -i \"s#^export \$key=.*#export \$key=\\\"\$value\\\"#\" ~/.env.pi; else printf 'export %s=\\\"%s\\\"\n' \"\$key\" \"\$value\" >> ~/.env.pi; fi; }
+    upsert ACPX_AGENT $q_agent
+    upsert ACPX_SESSION_MODE $q_session
+    upsert ACPX_CWD $q_remote
+    sed -i '/^export PI_ACP_PI_COMMAND=/d' ~/.env.pi
+    sed -i '/^export PI_WORKER_PI_ARGS=/d' ~/.env.pi"
+}
+
+start_observatory() {
+  has_service observatory || return 0
+  local q_remote
+  q_remote="$(shell_quote "$REMOTE_WORKSPACE")"
+  run_vm "set -euo pipefail
+    cd $q_remote
+    tmux kill-session -t acp-observatory >/dev/null 2>&1 || true
+    tmux new-session -d -s acp-observatory \"cd $q_remote && source ~/.env.pi 2>/dev/null || true; bun --filter acp-observatory serve --host 0.0.0.0 --port 4173\" || true"
+}
+
+redeploy_cmd() {
+  require_profile
+  [[ -n "$LOCAL_WORKSPACE" ]] || { echo "profile $PROFILE missing localWorkspace" >&2; exit 1; }
+  [[ -d "$LOCAL_WORKSPACE" ]] || { echo "local workspace not found: $LOCAL_WORKSPACE" >&2; exit 1; }
+
+  local archive remote_archive q_remote q_archive
+  archive="$(mktemp)"
+  remote_archive="/tmp/pi-orchestrator-${PROFILE}-workspace-$$-$RANDOM.tgz"
+  q_remote="$(shell_quote "$REMOTE_WORKSPACE")"
+  q_archive="$(shell_quote "$remote_archive")"
+  (cd "$LOCAL_WORKSPACE" && COPYFILE_DISABLE=1 tar --exclude='.git' --exclude='node_modules' --exclude='**/node_modules' --exclude='.agent' -czf "$archive" .)
+  chmod 600 "$archive"
+  orbctl push -m "$VM" "$archive" "$remote_archive" >/dev/null
+  run_vm "set -euo pipefail; mkdir -p $q_remote; cd $q_remote; tar -xzf $q_archive; rm -f $q_archive; if [[ -f package.json ]]; then npm install; fi"
+  rm -f "$archive"
+
+  # Current runtime is still carried by this orchestrator repo. Overlay scripts/vm when target workspace is not this repo.
+  if [[ "$LOCAL_WORKSPACE" != "$ROOT_DIR" ]]; then
+    local runtime_archive remote_runtime q_runtime
+    runtime_archive="$(mktemp)"
+    remote_runtime="/tmp/pi-orchestrator-${PROFILE}-runtime-$$-$RANDOM.tgz"
+    q_runtime="$(shell_quote "$remote_runtime")"
+    (cd "$ROOT_DIR" && COPYFILE_DISABLE=1 tar -czf "$runtime_archive" scripts/vm packages/pi-caveman packages/pi-auto-skills packages/pi-task-loop .pi package.json package-lock.json 2>/dev/null || tar -czf "$runtime_archive" scripts/vm)
+    chmod 600 "$runtime_archive"
+    orbctl push -m "$VM" "$runtime_archive" "$remote_runtime" >/dev/null
+    run_vm "set -euo pipefail; cd $q_remote; tar -xzf $q_runtime; rm -f $q_runtime; if [[ -f package.json ]]; then npm install; fi"
+    rm -f "$runtime_archive"
+  fi
+
+  install_runtime_links
+  write_worker_env
+  sync_codex_auth
+  if has_service gateway || has_service telegram; then
+    PI_WORKER_VM_NAME="$VM" PI_WORKER_VM_REPO_DIR="$REMOTE_WORKSPACE" bash "$ROOT_DIR/scripts/vm/pi-worker-instance" restart all
+  fi
+  start_observatory
+  status_cmd
+}
+
+acp_cmd() {
+  require_profile
+  local prompt="$*"
+  [[ -n "$prompt" ]] || { echo "usage: pi-orchestrator acp --profile <name> <prompt>" >&2; exit 1; }
+  PI_WORKER_VM_NAME="$VM" PI_WORKER_VM_REPO_DIR="$REMOTE_WORKSPACE" bash "$ROOT_DIR/scripts/vm/pi-worker-acp" run "$prompt"
+}
+
+parse_globals "$@"
+cmd="${ARGS[0]:-}"
+if [[ ${#ARGS[@]} -gt 1 ]]; then
+  ARGS=("${ARGS[@]:1}")
+else
+  ARGS=()
+fi
+
+case "$cmd" in
+  list) list_cmd ;;
+  status) status_cmd ;;
+  redeploy) redeploy_cmd ;;
+  acp) acp_cmd "${ARGS[@]+"${ARGS[@]}"}" ;;
+  "") usage; exit 1 ;;
+  *) echo "unknown command: $cmd" >&2; usage; exit 1 ;;
+esac

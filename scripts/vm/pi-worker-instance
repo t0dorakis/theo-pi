@@ -58,10 +58,10 @@ restart_target() {
 import secrets
 print(secrets.token_urlsafe(32))
 PY
-); token=\$(cat ~/.pi-worker/gateway-token); tmux kill-session -t theo-pi-gateway >/dev/null 2>&1 || true; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-gateway \"source ~/.env.pi 2>/dev/null || true; export PI_WORKER_GATEWAY_TOKEN=\$token; ~/bin/pi-worker-gateway\""
+); token=\$(cat ~/.pi-worker/gateway-token); tmux kill-session -t theo-pi-gateway >/dev/null 2>&1 || true; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-gateway \"source ~/.env.pi 2>/dev/null || true; export PATH=\\\"\\\$HOME/.npm-global/bin:\\\$HOME/.bun/bin:\\\$HOME/bin:\\\$PATH\\\"; export PI_WORKER_GATEWAY_TOKEN=\$token; ~/bin/pi-worker-gateway\""
       ;;
     bot)
-      run_vm "tmux kill-session -t theo-pi-telegram-bot >/dev/null 2>&1 || true; tmux kill-session -t theo-pi-telegram-runner >/dev/null 2>&1 || true; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-telegram-bot 'source ~/.env.pi 2>/dev/null || true; ~/bin/pi-worker-telegram-bot'; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-telegram-runner 'source ~/.env.pi 2>/dev/null || true; ~/bin/pi-worker-telegram-runner'"
+      run_vm "tmux kill-session -t theo-pi-telegram-bot >/dev/null 2>&1 || true; tmux kill-session -t theo-pi-telegram-runner >/dev/null 2>&1 || true; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-telegram-bot 'source ~/.env.pi 2>/dev/null || true; export PATH=\"\$HOME/.npm-global/bin:\$HOME/.bun/bin:\$HOME/bin:\$PATH\"; ~/bin/pi-worker-telegram-bot'; cd '$VM_REPO_DIR' && tmux new-session -d -s theo-pi-telegram-runner 'source ~/.env.pi 2>/dev/null || true; export PATH=\"\$HOME/.npm-global/bin:\$HOME/.bun/bin:\$HOME/bin:\$PATH\"; ~/bin/pi-worker-telegram-runner'"
       ;;
     supervisor)
       run_vm "~/bin/pi-worker-restart '$SESSION'"
