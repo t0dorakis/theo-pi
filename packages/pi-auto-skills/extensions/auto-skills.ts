@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import {
   REVIEW_ENTRY_TYPE,
@@ -174,26 +175,22 @@ export default function autoSkillsExtension(pi: ExtensionAPI) {
       "Good skills include when to use, numbered steps, pitfalls, and verification steps.",
     ],
     parameters: TOOL_PARAMS,
-    renderCall(args) {
+    renderCall(args, theme, context) {
+      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
       const action = typeof args?.action === "string" ? args.action : "manage";
       const name = typeof args?.name === "string" ? args.name : "(unnamed)";
-      return {
-        type: "text",
-        text: `auto-skill ${action} ${name}`,
-        renderShell: "self",
-      };
+      text.setText(theme.fg("toolTitle", `auto-skill ${action} ${name}`));
+      return text;
     },
-    renderResult(result) {
+    renderResult(result, _options, theme, context) {
+      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
       const details = (result?.details ?? {}) as Record<string, unknown>;
       const lines = [`${result?.isError ? "error" : "ok"}: ${String(details.message ?? "auto-skill operation complete")}`];
       if (typeof details.path === "string") lines.push(`path: ${details.path}`);
       if (typeof details.strategy === "string") lines.push(`strategy: ${details.strategy}`);
       if (typeof details.error === "string") lines.push(`detail: ${details.error}`);
-      return {
-        type: "text",
-        text: lines.join("\n"),
-        renderShell: "self",
-      };
+      text.setText(theme.fg(result?.isError ? "error" : "toolOutput", lines.join("\n")));
+      return text;
     },
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const action = params.action as Action;
