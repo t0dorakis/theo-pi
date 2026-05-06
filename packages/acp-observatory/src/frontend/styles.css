@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@keyframes obv-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@theme {
+  --color-obv-bg: #151515;
+  --color-obv-panel: #050505;
+  --color-obv-ink: #f7f7f2;
+  --color-obv-muted: #8d8d86;
+  --color-obv-line: #2f2f2b;
+  --animate-obv-pulse: obv-pulse 1.1s steps(2, end) infinite;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #151515;
+  color: #f7f7f2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}

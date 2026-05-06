@@ -3,12 +3,19 @@ import { join } from "node:path"
 
 import { getRuntimePaths } from "./paths"
 
+export type AcpxJobEventLogAttempt = "initial" | "retry" | "session"
+
 export type AcpxJobEventLogRecord = {
   seq: number
   at: string
   jobId: string
-  attempt: "initial" | "retry" | "session"
-  event: unknown
+  attempt: AcpxJobEventLogAttempt
+  /** Legacy compatibility field. Prefer format + payload for new consumers. */
+  event?: unknown
+  /** Discriminator for protocol/base event payload shape. */
+  format?: string
+  /** Native ACP/ACPX/pi-worker payload for the given format. */
+  payload?: unknown
 }
 
 export function createAcpxEventLog(stateDir: string) {
@@ -19,24 +26,51 @@ export function createAcpxEventLog(stateDir: string) {
     return join(paths.jobEventsDir, `${jobId}.ndjson`)
   }
 
-  async function append(jobId: string, attempt: AcpxJobEventLogRecord["attempt"], event: unknown) {
+  async function appendRecord(input: {
+    jobId: string
+    attempt: AcpxJobEventLogAttempt
+    event?: unknown
+    format?: string
+    payload?: unknown
+  }) {
     await mkdir(paths.jobEventsDir, { recursive: true })
-    const previousSeq = counters.get(jobId) ?? await lastSeq(eventPath(jobId))
+    const previousSeq = counters.get(input.jobId) ?? await lastSeq(eventPath(input.jobId))
     const seq = previousSeq + 1
-    counters.set(jobId, seq)
+    counters.set(input.jobId, seq)
     const record: AcpxJobEventLogRecord = {
       seq,
       at: new Date().toISOString(),
+      jobId: input.jobId,
+      attempt: input.attempt,
+      ...(Object.hasOwn(input, "event") ? { event: input.event } : {}),
+      ...(input.format ? { format: input.format, payload: input.payload } : {}),
+    }
+    await appendFile(eventPath(input.jobId), `${JSON.stringify(record)}\n`, "utf8")
+  }
+
+  async function append(jobId: string, attempt: AcpxJobEventLogAttempt, event: unknown, options: { format?: string } = {}) {
+    await appendRecord({
       jobId,
       attempt,
       event,
-    }
-    await appendFile(eventPath(jobId), `${JSON.stringify(record)}\n`, "utf8")
+      ...(options.format ? { format: options.format, payload: event } : {}),
+    })
+  }
+
+  async function appendPayload(jobId: string, attempt: AcpxJobEventLogAttempt, format: string, payload: unknown, options: { legacyEvent?: unknown } = {}) {
+    await appendRecord({
+      jobId,
+      attempt,
+      format,
+      payload,
+      ...(Object.hasOwn(options, "legacyEvent") ? { event: options.legacyEvent } : {}),
+    })
   }
 
   return {
     eventPath,
     append,
+    appendPayload,
   }
 }
 

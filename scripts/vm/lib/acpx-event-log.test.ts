@@ -21,3 +21,26 @@ test("event seq continues from existing file after logger recreation", async () 
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test("formatted events preserve payload and optional legacy event", async () => {
+  const root = await mkdtemp(join(tmpdir(), "acpx-event-log-"))
+  try {
+    const log = createAcpxEventLog(root)
+    await log.append("job-1", "initial", { type: "text_delta", text: "a" }, { format: "acpx-runtime-event-v1" })
+    await log.appendPayload("job-1", "initial", "pi-worker-turn-result-v1", { status: "completed" }, { legacyEvent: { type: "turn_result", result: { status: "completed" } } })
+
+    const records = (await readFile(log.eventPath("job-1"), "utf8")).trim().split("\n").map((line) => JSON.parse(line))
+    expect(records[0]).toMatchObject({
+      format: "acpx-runtime-event-v1",
+      payload: { type: "text_delta", text: "a" },
+      event: { type: "text_delta", text: "a" },
+    })
+    expect(records[1]).toMatchObject({
+      format: "pi-worker-turn-result-v1",
+      payload: { status: "completed" },
+      event: { type: "turn_result", result: { status: "completed" } },
+    })
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})

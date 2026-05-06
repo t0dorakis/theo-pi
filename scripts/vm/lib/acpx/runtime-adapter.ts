@@ -145,11 +145,11 @@ export function createAcpxRuntimeAdapter(options: AcpxRuntimeAdapterOptions): Ac
     const chunks: string[] = []
     try {
       for await (const event of turn.events) {
-        await eventLog.append(input.job.id, input.attempt, event)
+        await eventLog.append(input.job.id, input.attempt, event, { format: "acpx-runtime-event-v1" })
         if (event.type === "text_delta" && event.stream !== "thought") chunks.push(event.text)
       }
       const result = await turn.result
-      await eventLog.append(input.job.id, input.attempt, { type: "turn_result", result })
+      await eventLog.appendPayload(input.job.id, input.attempt, "pi-worker-turn-result-v1", result, { legacyEvent: { type: "turn_result", result } })
       const answer = chunks.join("").trim()
       return { result, answer, hadOutput: answer.length > 0 }
     } finally {
@@ -193,17 +193,23 @@ export function createAcpxRuntimeAdapter(options: AcpxRuntimeAdapterOptions): Ac
     let handle: AcpRuntimeHandle
     try {
       handle = await getHandle(job, mod)
-      await eventLog.append(job.id, "session", {
+      await eventLog.appendPayload(job.id, "session", "pi-worker-session-ready-v1", {
+        sessionKey: handle.sessionKey,
+        acpxRecordId: handle.acpxRecordId,
+        backendSessionId: handle.backendSessionId,
+        agentSessionId: handle.agentSessionId,
+        cwd: handle.cwd,
+      }, { legacyEvent: {
         type: "session_ready",
         sessionKey: handle.sessionKey,
         acpxRecordId: handle.acpxRecordId,
         backendSessionId: handle.backendSessionId,
         agentSessionId: handle.agentSessionId,
         cwd: handle.cwd,
-      })
+      } })
     } catch (e) {
       const msg = e instanceof AcpRuntimeError ? `AcpRuntimeError(${e.code}): ${e.message}` : String(e)
-      await eventLog.append(job.id, "session", { type: "session_error", error: msg })
+      await eventLog.appendPayload(job.id, "session", "pi-worker-session-error-v1", { error: msg }, { legacyEvent: { type: "session_error", error: msg } })
       await writeFailure(job, msg)
       return
     }
@@ -223,7 +229,7 @@ export function createAcpxRuntimeAdapter(options: AcpxRuntimeAdapterOptions): Ac
         }
         await retryWithFreshSession(job, runtime, mod).catch(async (error) => {
           const msg = error instanceof AcpRuntimeError ? `AcpRuntimeError(${error.code}): ${error.message}` : String(error)
-          await eventLog.append(job.id, "retry", { type: "retry_error", error: msg })
+          await eventLog.appendPayload(job.id, "retry", "pi-worker-retry-error-v1", { error: msg }, { legacyEvent: { type: "retry_error", error: msg } })
           await writeFailure(job, msg)
         })
       } else {
@@ -237,13 +243,13 @@ export function createAcpxRuntimeAdapter(options: AcpxRuntimeAdapterOptions): Ac
           return
         } catch (retryError) {
           const msg = retryError instanceof AcpRuntimeError ? `AcpRuntimeError(${retryError.code}): ${retryError.message}` : String(retryError)
-          await eventLog.append(job.id, "retry", { type: "retry_error", error: msg })
+          await eventLog.appendPayload(job.id, "retry", "pi-worker-retry-error-v1", { error: msg }, { legacyEvent: { type: "retry_error", error: msg } })
           await writeFailure(job, msg)
           return
         }
       }
       const msg = e instanceof AcpRuntimeError ? `AcpRuntimeError(${e.code}): ${e.message}` : String(e)
-      await eventLog.append(job.id, "initial", { type: "turn_exception", error: msg })
+      await eventLog.appendPayload(job.id, "initial", "pi-worker-turn-exception-v1", { error: msg }, { legacyEvent: { type: "turn_exception", error: msg } })
       await writeFailure(job, msg)
     } finally {
       activeTurns.delete(job.id)

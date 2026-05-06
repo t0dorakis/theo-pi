@@ -1,0 +1,54 @@
+{
+  "name": "acp-observatory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Effect + React observatory for live ACP/ACPX agent trace streams.",
+  "author": "Theo",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t0dorakis/theo-pi.git",
+    "directory": "packages/acp-observatory"
+  },
+  "keywords": [
+    "acp",
+    "acpx",
+    "agent-observability",
+    "effect",
+    "react",
+    "vite"
+  ],
+  "files": [
+    "dist/",
+    "src/",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "serve": "bun src/backend/http-server.ts",
+    "send-file": "bun src/backend/file-sender.ts",
+    "review-watch": "bun src/backend/review-watch.ts",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check:ts": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@effect/platform": "latest",
+    "@effect/platform-node": "latest",
+    "@tailwindcss/vite": "latest",
+    "effect": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "tailwindcss": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "bun-types": "latest",
+    "typescript": "latest"
+  }
+}
