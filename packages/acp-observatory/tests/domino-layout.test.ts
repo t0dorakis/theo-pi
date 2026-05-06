@@ -61,6 +61,19 @@ test("long chronological layout preserves domino invariants", () => {
   assertChronologicalInvariants(layoutDominoBlocks(blocks))
 })
 
+test("layout never throws for 99 plain thought blocks", () => {
+  const blocks = Array.from({ length: 99 }, (_, index): DominoBlock => ({ id: `thought-${index}`, kind: "thought" }))
+
+  assertChronologicalInvariants(layoutDominoBlocks(blocks))
+})
+
+test("layout never throws for large mixed traces", () => {
+  const kinds: DominoBlock["kind"][] = ["prompt", "thought", "tool", "message"]
+  const blocks = Array.from({ length: 1000 }, (_, index): DominoBlock => ({ id: `block-${index}`, kind: kinds[index % kinds.length] }))
+
+  assertChronologicalInvariants(layoutDominoBlocks(blocks))
+})
+
 test("chronological layout keeps existing cells stable for append-only growth", () => {
   const state = createDominoLayoutState()
   const firstBlocks: DominoBlock[] = [

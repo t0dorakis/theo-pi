@@ -131,13 +131,23 @@ function buildPath(blocks: DominoBlock[], branchSide: 1 | -1): DominoCell[] | nu
   return hasFalseAdjacency(cells) ? null : cells
 }
 
+function buildGuaranteedStairPath(blocks: DominoBlock[]): DominoCell[] {
+  return blocks.map((block, index) => {
+    const pair = Math.floor(index / 2)
+    return {
+      ...block,
+      x: index % 2 === 0 ? pair : pair + 1,
+      y: pair,
+    }
+  })
+}
+
 export function createDominoLayoutState(): DominoLayoutState {
   return { cells: [] }
 }
 
 export function updateDominoLayout(state: DominoLayoutState, blocks: DominoBlock[]): DominoCell[] {
-  const primary = buildPath(blocks, 1) ?? buildPath(blocks, -1)
-  if (!primary) throw new Error("unable to layout chronological domino path")
+  const primary = buildPath(blocks, 1) ?? buildPath(blocks, -1) ?? buildGuaranteedStairPath(blocks)
   state.cells = primary
   return primary
 }
