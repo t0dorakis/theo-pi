@@ -144,7 +144,7 @@ For Theo's local Linux VM worker setup, repo includes:
 - `scripts/vm/pi-worker-acpx-smoke-test` — repeatable real acpx smoke: enqueue job, run it, assert queue/result/ACP session state
 - `scripts/vm/pi-worker-acp` — dogfood CLI for agent-to-VM delegation over ACPX (`run`, `result`, `cancel`, `status`)
 - `scripts/vm/pi-worker-acp-stdio.ts` — ACP-compatible stdio adapter used by `acpx --agent`
-- `templates/pi-worker/` — starter `settings.json`, `.env`, and SSH hardening snippets
+- `templates/pi-worker/` — example `settings.json`, `.env`, and SSH hardening snippets; installer generates VM settings from repo `.pi/settings.json`
 
 ACPX worker quick start:
 

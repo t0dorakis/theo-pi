@@ -1,7 +1,10 @@
 {
   "packages": [
-    "../../workspaces/theo-pi/packages/pi-auto-skills",
-    "../../workspaces/theo-pi/packages/pi-caveman",
-    "npm:pi-web-access"
+    "<REPO_DIR>/packages/pi-auto-skills",
+    "<REPO_DIR>/packages/pi-caveman",
+    "<REPO_DIR>/packages/pi-task-loop",
+    "npm:pi-web-access",
+    "npm:pi-fff",
+    "npm:@tintinweb/pi-subagents"
   ]
 }
