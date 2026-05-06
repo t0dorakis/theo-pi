@@ -50,7 +50,8 @@ async function main() {
     `cd ${shellQuote(workspace)}`,
     `job=$(bun scripts/vm/pi-worker-submit-job.ts ${shellQuote(name)} ${shellQuote(prompt)} | jq -r .id)`,
     `echo $job`,
-    `nohup bash -lc ${shellQuote(`cd ${workspace}; source ~/.env.pi 2>/dev/null || true; export PATH="$HOME/bin:$HOME/.bun/bin:$PATH"; bun scripts/vm/pi-worker-run-job.ts $job`)} > ~/.pi-worker/jobs/runner-$job.log 2>&1 &`,
+    `export job`,
+    `nohup bash -lc ${shellQuote(`cd ${workspace}; source ~/.env.pi 2>/dev/null || true; export PATH="$HOME/bin:$HOME/.bun/bin:$PATH"; bun scripts/vm/pi-worker-run-job.ts "$job"`)} > ~/.pi-worker/jobs/runner-$job.log 2>&1 &`,
   ].join("; ")
 
   const { stdout } = await run(`orbctl run -m ${shellQuote(vm)} bash -lc ${shellQuote(submit)}`)
