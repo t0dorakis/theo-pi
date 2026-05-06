@@ -47,17 +47,40 @@ pass "~/.pi/agent exists"
 [[ -f "$HOME/.pi/agent/settings.json" ]] || fail "~/.pi/agent/settings.json missing"
 pass "settings.json exists"
 
-if grep -q 'pi-caveman' "$HOME/.pi/agent/settings.json"; then
-  pass "pi-caveman configured"
-else
-  fail "pi-caveman not configured"
-fi
-
-if grep -q 'pi-auto-skills' "$HOME/.pi/agent/settings.json"; then
-  pass "pi-auto-skills configured"
-else
-  fail "pi-auto-skills not configured"
-fi
+python3 - <<'PY'
+import json
+from pathlib import Path
+settings = json.loads(Path.home().joinpath('.pi/agent/settings.json').read_text())
+packages = settings.get('packages', [])
+expected = {
+    'pi-auto-skills',
+    'pi-caveman',
+    'pi-task-loop',
+    'npm:pi-web-access',
+    'npm:pi-fff',
+    'npm:@tintinweb/pi-subagents',
+}
+configured = set()
+missing_paths = []
+for package in packages:
+    if not isinstance(package, str):
+        continue
+    if package.startswith('npm:'):
+        configured.add(package)
+        continue
+    path = Path(package)
+    configured.add(path.name)
+    if package.startswith('/') and not path.exists():
+        missing_paths.append(package)
+missing_packages = sorted(expected - configured)
+if missing_packages:
+    raise SystemExit('[fail] packages not configured: ' + ', '.join(missing_packages))
+for package in sorted(expected):
+    print(f'[pass] {package} configured')
+if missing_paths:
+    raise SystemExit('[fail] configured package paths missing: ' + ', '.join(missing_paths))
+print('[pass] configured local package paths exist')
+PY
 
 [[ -d "$HOME/.pi-worker" ]] || fail "~/.pi-worker missing"
 pass "~/.pi-worker exists"

@@ -397,33 +397,36 @@ export default function taskLoop(pi: ExtensionAPI) {
     const width = tui.terminal.columns;
     const truncate = (line: string) => truncateToWidth(line, width);
 
-    if (tasks.length === 0) return [];
+    const visibleTasks = tasks.filter((task) => task.status !== "done");
+    if (visibleTasks.length === 0) return [];
 
     const done = tasks.filter((task) => task.status === "done").length;
     const inProgress = tasks.filter((task) => task.status === "in_progress").length;
     const blocked = tasks.filter((task) => task.status === "blocked").length;
     const pending = tasks.filter((task) => task.status === "pending").length;
-    const counts = [`${done} done`, `${inProgress} active`, `${pending} open`];
+    const counts = [`${inProgress} active`, `${pending} open`];
+    if (done > 0) counts.push(`${done} done`);
     if (blocked > 0) counts.push(`${blocked} blocked`);
 
-    const header = truncate(`${theme.fg("accent", "●")} ${theme.fg("accent", `${tasks.length} tasks (${counts.join(", ")})`)} ${theme.fg("dim", `· next ${formatRemaining(state.nextTickAt)} · iteration ${state.iteration}`)}`);
+    const taskLabel = visibleTasks.length === tasks.length
+      ? `${tasks.length} tasks`
+      : `${visibleTasks.length} of ${tasks.length} tasks`;
+    const header = truncate(`${theme.fg("accent", "●")} ${theme.fg("accent", `${taskLabel} (${counts.join(", ")})`)} ${theme.fg("dim", `· next ${formatRemaining(state.nextTickAt)} · iteration ${state.iteration}`)}`);
     const lines = [header];
 
-    const visible = tasks.slice(0, MAX_VISIBLE_TASKS);
+    const visible = visibleTasks.slice(0, MAX_VISIBLE_TASKS);
     for (const task of visible) {
       const icon = taskIcon(task);
       const id = theme.fg("dim", `#${task.id}`);
-      const title = task.status === "done"
-        ? theme.fg("dim", theme.strikethrough ? theme.strikethrough(task.title) : task.title)
-        : task.status === "in_progress"
-          ? theme.fg("accent", `${task.title}…`)
-          : task.title;
+      const title = task.status === "in_progress"
+        ? theme.fg("accent", `${task.title}…`)
+        : task.title;
       const badge = task.status === "blocked" ? theme.fg("warning", " blocked") : "";
-      lines.push(truncate(`  ${task.status === "done" ? theme.fg("success", icon) : task.status === "in_progress" ? theme.fg("accent", icon) : icon} ${id} ${title}${badge}`));
+      lines.push(truncate(`  ${task.status === "in_progress" ? theme.fg("accent", icon) : icon} ${id} ${title}${badge}`));
     }
 
-    if (tasks.length > MAX_VISIBLE_TASKS) {
-      lines.push(truncate(theme.fg("dim", `    … and ${tasks.length - MAX_VISIBLE_TASKS} more`)));
+    if (visibleTasks.length > MAX_VISIBLE_TASKS) {
+      lines.push(truncate(theme.fg("dim", `    … and ${visibleTasks.length - MAX_VISIBLE_TASKS} more`)));
     }
 
     return lines;
@@ -436,7 +439,7 @@ export default function taskLoop(pi: ExtensionAPI) {
     const tasks = readTasks(ctx);
     ctx.ui.setStatus(STATUS_KEY, statusText(state, activeCount));
 
-    if (tasks.length === 0) {
+    if (tasks.every((task) => task.status === "done")) {
       if (widgetRegistered) {
         ctx.ui.setWidget(STATUS_KEY, undefined);
         widgetRegistered = false;

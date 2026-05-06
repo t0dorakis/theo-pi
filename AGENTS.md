@@ -8,3 +8,4 @@ Local Pi rules for this repo.
 - Outside the `theo-pi` VM only, prefer `claude-acpx` subagents for reviews, parallel deep-thinking, and web research; the VM lacks Claude Code access.
 - For Claude delegation details, load skill `claude-code-acpx-subagent`.
 - Use Graphite CLI (`gt`) for branches/PRs: new idea = new stack branch; same idea = stay on current branch and amend/submit.
+- After finishing a feature, run three review subagents: critical, positive-patterns, and task-specific with web research/search when useful.
