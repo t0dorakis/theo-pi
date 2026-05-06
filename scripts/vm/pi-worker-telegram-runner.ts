@@ -3,10 +3,12 @@ import { execFile } from "node:child_process"
 import { mkdir } from "node:fs/promises"
 import { promisify } from "node:util"
 
+import { apiThrottler } from "@grammyjs/transformer-throttler"
+import { Api } from "grammy"
+
 import { getWorkerEnv } from "./lib/env"
 import { createJobQueue } from "./lib/jobs"
 import { getScriptDir, localScript } from "./lib/paths"
-import { createTelegramApi } from "./lib/telegram-api"
 import { createTelegramRunner } from "./lib/telegram-runner"
 
 const execFileAsync = promisify(execFile)
@@ -17,7 +19,7 @@ const telegramQueue = {
   reapExpiredLeases: queue.reapExpiredLeases,
   async claimNextJob() {
     const jobs = await queue.listJobs()
-    return jobs.find((job) => job.status === "pending" && !job.telegramDeliveredAt && /^\d+$/.test(job.chatId)) ?? null
+    return jobs.find((job) => job.status === "pending" && !job.telegramDeliveredAt && /^-?\d+$/.test(job.chatId)) ?? null
   },
   completeJob: queue.completeJob,
   failJob: queue.failJob,
@@ -44,10 +46,21 @@ async function runLocal(command: string, args: string[] = []) {
   return `${stdout}${stderr}`.trim()
 }
 
-const telegram = createTelegramApi({
-  token: env.telegramBotToken,
-  allowedChatIds: env.telegramAllowedChatIds,
-})
+const api = new Api(env.telegramBotToken)
+api.config.use(apiThrottler())
+const telegram = {
+  sendMessage: async (chatId: number, text: string) => {
+    let remaining = text
+    do {
+      const chunk = remaining.slice(0, 4000) || " "
+      remaining = remaining.slice(4000)
+      await api.sendMessage(chatId, chunk, { link_preview_options: { is_disabled: true } })
+    } while (remaining.length > 0)
+  },
+  sendChatAction: async (chatId: number, action: string) => {
+    await api.sendChatAction(chatId, action as "typing")
+  },
+}
 
 const runner = createTelegramRunner({
   queue: telegramQueue,

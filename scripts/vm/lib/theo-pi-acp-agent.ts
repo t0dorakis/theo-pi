@@ -58,7 +58,7 @@ export class TheoPiAcpAgent {
       : fixed && fixed.trim()
         ? fixed.trim()
         : `acp-${randomUUID()}`
-    if (/^\d+$/.test(chatId)) throw new Error("numeric chatId is reserved for Telegram jobs")
+    if (/^-?\d+$/.test(chatId)) throw new Error("numeric chatId is reserved for Telegram jobs")
     const sessionId = chatId
     this.sessions.set(sessionId, { sessionId, chatId, activeJobId: null, pendingAbort: null })
     return { sessionId, _meta: { "theoPi.chatId": chatId } } as acp.NewSessionResponse

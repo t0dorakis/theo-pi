@@ -108,7 +108,7 @@ async function drainQueue() {
     while (true) {
       await queue.reapExpiredLeases()
       const jobs = await queue.listJobs()
-      const nextPending = jobs.find((job) => job.status === "pending" && !job.telegramDeliveredAt && !/^\d+$/.test(job.chatId))
+      const nextPending = jobs.find((job) => job.status === "pending" && !job.telegramDeliveredAt && !/^-?\d+$/.test(job.chatId))
       if (!nextPending) break
       await runJobProcess(nextPending.id)
     }
@@ -265,7 +265,7 @@ const server = Bun.serve({
         const body = (await request.json()) as JsonRecord
         const prompt = String(body.prompt ?? "").trim()
         const requestedChatId = String(body.chatId ?? "").trim()
-        if (/^\d+$/.test(requestedChatId)) {
+        if (/^-?\d+$/.test(requestedChatId)) {
           return json({ ok: false, error: "numeric chatId is reserved for Telegram jobs" }, { status: 400 })
         }
         const chatId = requestedChatId || `gateway-${randomUUID()}`

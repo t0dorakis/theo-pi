@@ -41,13 +41,13 @@ PY
 )
     fi
     token=\$(cat "$REMOTE_TOKEN_FILE")
-    if ! curl -fsS -H \"Authorization: Bearer \$token\" http://127.0.0.1:8787/status >/dev/null 2>&1; then
+    if ! curl -fsS -H "Authorization: Bearer \$token" http://127.0.0.1:8787/status >/dev/null 2>&1; then
       tmux kill-session -t theo-pi-gateway >/dev/null 2>&1 || true
       cd '$VM_REPO_DIR'
-      tmux new-session -d -s theo-pi-gateway \"source ~/.env.pi 2>/dev/null || true; export PI_WORKER_GATEWAY_TOKEN=\$token; export PI_WORKER_GATEWAY_DRAIN=1; ~/bin/pi-worker-gateway\"
+      tmux new-session -d -s theo-pi-gateway \"source ~/.env.pi 2>/dev/null || true; export PATH=\\\"\\\$HOME/.npm-global/bin:\\\$HOME/.bun/bin:\\\$HOME/bin:\\\$PATH\\\"; export PI_WORKER_GATEWAY_TOKEN=\\\"\\\$(cat '$REMOTE_TOKEN_FILE')\\\"; export PI_WORKER_GATEWAY_DRAIN=1; ~/bin/pi-worker-gateway\"
       for i in 1 2 3 4 5; do
         sleep 1
-        curl -fsS -H \"Authorization: Bearer \$token\" http://127.0.0.1:8787/status >/dev/null 2>&1 && exit 0
+        curl -fsS -H "Authorization: Bearer \$token" http://127.0.0.1:8787/status >/dev/null 2>&1 && exit 0
       done
       tmux capture-pane -pt theo-pi-gateway:0 -S -80 >&2 || true
       exit 1

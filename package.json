@@ -48,7 +48,10 @@
     ]
   },
   "dependencies": {
+    "@grammyjs/runner": "^2.0.3",
+    "@grammyjs/transformer-throttler": "^1.2.1",
     "@sinclair/typebox": "^0.34.49",
-    "acpx": "0.6.1"
+    "acpx": "0.6.1",
+    "grammy": "^1.42.0"
   }
 }

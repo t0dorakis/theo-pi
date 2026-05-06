@@ -21,8 +21,8 @@ test("claims oldest pending job FIFO", async () => {
   tempDirs.push(root)
   const queue = createJobQueue(root, { leaseDurationSeconds: 60 })
 
-  const first = await queue.enqueueJob({ chatId: "1", prompt: "first" })
-  const second = await queue.enqueueJob({ chatId: "1", prompt: "second" })
+  const first = await queue.enqueueJob({ chatId: "1", prompt: "first", createdAt: "2026-04-16T10:00:00.000Z" })
+  const second = await queue.enqueueJob({ chatId: "1", prompt: "second", createdAt: "2026-04-16T10:00:01.000Z" })
 
   const claimed = await queue.claimNextJob("runner-1")
   expect(claimed?.id).toBe(first.id)

@@ -1,0 +1,30 @@
+{
+  "name": "topi",
+  "vm": "theo-pi",
+  "user": "minimi",
+  "localWorkspace": "/Users/minimi/dev/theo-pi",
+  "remoteWorkspace": "/home/minimi/workspaces/theo-pi",
+  "agent": "codex",
+  "sessionMode": "persistent",
+  "deploymentMode": "copy",
+  "trustLevel": "orchestrator",
+  "hostCliMounts": [
+    {
+      "name": "graphite",
+      "hostPath": "/mnt/mac/opt/homebrew/bin/gt",
+      "remotePath": "/home/minimi/bin/gt"
+    },
+    {
+      "name": "graphite-config",
+      "hostPath": "/mnt/mac/Users/minimi/.config/graphite",
+      "remotePath": "/home/minimi/.config/graphite"
+    },
+    {
+      "name": "graphite-state",
+      "hostPath": "/mnt/mac/Users/minimi/.local/share/graphite",
+      "remotePath": "/home/minimi/.local/share/graphite"
+    }
+  ],
+  "services": ["gateway", "telegram", "acp", "observatory"],
+  "syncCodexAuth": true
+}
