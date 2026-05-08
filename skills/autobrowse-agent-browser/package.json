@@ -1,0 +1,12 @@
+{
+  "name": "autobrowse-agent-browser",
+  "version": "0.1.0",
+  "description": "Self-improving browser agent via skill learning using agent-browser through ACPX",
+  "type": "module",
+  "scripts": {
+    "evaluate": "node scripts/evaluate.mjs"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
