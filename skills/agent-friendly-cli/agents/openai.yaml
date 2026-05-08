@@ -1,0 +1,7 @@
+interface:
+  display_name: "Agent-Friendly CLI"
+  short_description: "Design CLIs that agents can call reliably"
+  default_prompt: "Use $agent-friendly-cli to design, implement, or review this CLI surface for non-interactive behavior, parseable output, errors, idempotency, async workflows, profiles, delivery, feedback, introspection, and acceptance criteria."
+
+policy:
+  allow_implicit_invocation: true
