@@ -16,6 +16,7 @@ dist/
 .pi/*
 !.pi/settings.json
 .agents/
+autobrowse/
 .agent/*
 !.agent/.gitkeep
 external/SmolVM/
