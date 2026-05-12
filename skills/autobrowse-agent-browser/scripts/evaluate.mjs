@@ -108,6 +108,7 @@ function claimRunDir(tracesDir) {
     const runId = `run-${String(runNumber).padStart(3, "0")}`;
     const traceDir = path.join(tracesDir, runId);
     try {
+      fs.mkdirSync(traceDir, { recursive: false });
       fs.mkdirSync(path.join(traceDir, "screenshots"), { recursive: false });
       return { runNumber, runId, traceDir };
     } catch (err) {
