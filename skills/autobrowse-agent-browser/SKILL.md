@@ -1,12 +1,24 @@
 ---
 name: autobrowse-agent-browser
 description: Self-improving browser automation using agent-browser. Use when you want an agent to learn a repeatable browser workflow for a specific website task, iterate on strategy.md from traces, then graduate durable site-specific skills into this repo or ~/.agents/skills.
-compatibility: "Requires Node.js 18+, ACPX, and agent-browser CLI. No ANTHROPIC_API_KEY is used by this harness; model access is delegated through ACPX (default: claude). Run npm install in skills/autobrowse-agent-browser before first use."
+compatibility: "Requires Node.js 18+, ACPX with a working claude exec backend, and agent-browser CLI. No ANTHROPIC_API_KEY is used by this harness; model access is delegated through ACPX (default: claude). Run npm install in the installed autobrowse-agent-browser skill directory before first use."
 ---
 
 # AutoBrowse Agent Browser
 
 Build reliable browser automation skills through iterative experimentation using `agent-browser` instead of Browserbase `browse`. Inner agent execution routes through ACPX, not direct Anthropic SDK/API keys. See `README.md` for full operator guide.
+
+## Install from skills.sh
+
+```bash
+npx skills add https://github.com/t0dorakis/theo-pi --skill autobrowse-agent-browser
+```
+
+Preview without installing:
+
+```bash
+npx skills add https://github.com/t0dorakis/theo-pi --skill autobrowse-agent-browser --list --full-depth
+```
 
 ## Source directory
 
@@ -16,7 +28,7 @@ Repo source lives at:
 skills/autobrowse-agent-browser
 ```
 
-If installed globally, use:
+If installed globally, set this to the installed skill directory before running harness scripts:
 
 ```bash
 export AUTOBROWSE_AGENT_BROWSER_DIR="${AUTOBROWSE_AGENT_BROWSER_DIR:-$PWD/skills/autobrowse-agent-browser}"

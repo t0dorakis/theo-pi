@@ -2,6 +2,21 @@
 
 Monorepo for Pi packages and extensions.
 
+## Agent skills
+
+### `autobrowse-agent-browser`
+
+Self-improving browser workflow skill backed by `agent-browser` and ACPX.
+
+Install with `skills.sh` / `skills` CLI:
+
+```bash
+npx skills add https://github.com/t0dorakis/theo-pi --skill autobrowse-agent-browser
+```
+
+Location:
+- `skills/autobrowse-agent-browser`
+
 ## Packages
 
 ### `pi-auto-skills`

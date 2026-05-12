@@ -4,6 +4,29 @@ Repo-backed skill for learning repeatable browser workflows with `agent-browser`
 
 Fork/provenance: inspired by and partially derived from Browserbase's MIT-licensed Autobrowse skill, then adapted for Pi, ACPX, and `agent-browser`.
 
+## Install from skills.sh
+
+This repo is public and uses the standard `skills/<name>/SKILL.md` layout, so install this skill directly from GitHub with the `skills` CLI:
+
+```bash
+npx skills add https://github.com/t0dorakis/theo-pi --skill autobrowse-agent-browser
+```
+
+Preview available skills without installing:
+
+```bash
+npx skills add https://github.com/t0dorakis/theo-pi --skill autobrowse-agent-browser --list --full-depth
+```
+
+After install, set `AUTOBROWSE_AGENT_BROWSER_DIR` to the installed skill directory if your agent runtime does not automatically expose the skill path. The harness still requires local ACPX/Claude auth plus the `agent-browser` CLI.
+
+## Requirements
+
+- Node.js 18+
+- ACPX with a working `claude exec` backend
+- `agent-browser` CLI plus installed browser runtime
+- trusted local workspace; real runs use ACPX `--approve-all` by default
+
 ## Why this exists
 
 Browser agents often rediscover site behavior on every run. This harness turns exploration into durable memory:
