@@ -5,6 +5,7 @@
   "localWorkspace": "/Users/minimi/dev/theo-pi",
   "remoteWorkspace": "/home/minimi/workspaces/theo-pi",
   "agent": "codex",
+  "agentCommand": "npx @zed-industries/codex-acp@^0.16.0",
   "sessionMode": "persistent",
   "deploymentMode": "copy",
   "trustLevel": "orchestrator",

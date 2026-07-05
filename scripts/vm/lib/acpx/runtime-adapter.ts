@@ -21,6 +21,8 @@ export type AcpxRuntimeAdapterOptions = {
   stateDir: string
   acpxStateDir: string
   agent: string
+  /** Overrides the registry launch command for `agent` (e.g. newer adapter pin). */
+  agentCommand?: string
   cwd: string | undefined
   timeoutMs: number
   sessionMode: "oneshot" | "persistent"
@@ -72,7 +74,9 @@ export function createAcpxRuntimeAdapter(options: AcpxRuntimeAdapterOptions): Ac
         new AcpxRuntime({
           cwd: options.cwd ?? process.cwd(),
           sessionStore: createFileSessionStore({ stateDir: options.acpxStateDir }),
-          agentRegistry: createAgentRegistry(),
+          agentRegistry: createAgentRegistry(
+            options.agentCommand ? { overrides: { [options.agent]: options.agentCommand } } : undefined,
+          ),
           permissionMode: "approve-all",
           timeoutMs: options.timeoutMs,
         })

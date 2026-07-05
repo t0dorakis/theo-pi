@@ -1,5 +1,7 @@
 export type AcpxConfig = {
   agent: string
+  /** Full launch command overriding the built-in registry entry for `agent` (e.g. adapter version pin). */
+  agentCommand: string | undefined
   sessionMode: "oneshot" | "persistent"
   cwd: string | undefined
   /** Acpx session store root (separate from PI_WORKER_STATE_DIR). Default: ~/.pi-worker/acp */
@@ -43,6 +45,7 @@ export function getWorkerEnv(): WorkerEnv {
   return {
     acpx: {
       agent: process.env.ACPX_AGENT ?? "pi",
+      agentCommand: process.env.ACPX_AGENT_COMMAND || undefined,
       sessionMode: (process.env.ACPX_SESSION_MODE === "persistent" ? "persistent" : "oneshot") as "oneshot" | "persistent",
       cwd: process.env.ACPX_CWD || undefined,
       stateDir: process.env.ACPX_STATE_DIR ?? `${homeDir}/.pi-worker/acp`,

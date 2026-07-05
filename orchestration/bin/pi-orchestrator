@@ -196,16 +196,19 @@ install_runtime_links() {
 }
 
 write_worker_env() {
-  local q_agent q_session q_remote
+  local agent_command q_agent q_session q_remote q_agent_command
+  agent_command="$(json_get "$PROFILE_FILE" agentCommand)"
   q_agent="$(shell_quote "$AGENT")"
   q_session="$(shell_quote "$SESSION_MODE")"
   q_remote="$(shell_quote "$REMOTE_WORKSPACE")"
+  q_agent_command="$(shell_quote "$agent_command")"
   run_vm "set -euo pipefail
     touch ~/.env.pi
     upsert() { key=\"\$1\"; value=\"\$2\"; if grep -q \"^export \$key=\" ~/.env.pi; then sed -i \"s#^export \$key=.*#export \$key=\\\"\$value\\\"#\" ~/.env.pi; else printf 'export %s=\\\"%s\\\"\n' \"\$key\" \"\$value\" >> ~/.env.pi; fi; }
     upsert ACPX_AGENT $q_agent
     upsert ACPX_SESSION_MODE $q_session
     upsert ACPX_CWD $q_remote
+    if [[ -n $q_agent_command ]]; then upsert ACPX_AGENT_COMMAND $q_agent_command; else sed -i '/^export ACPX_AGENT_COMMAND=/d' ~/.env.pi; fi
     sed -i '/^export PI_ACP_PI_COMMAND=/d' ~/.env.pi
     sed -i '/^export PI_WORKER_PI_ARGS=/d' ~/.env.pi"
 }

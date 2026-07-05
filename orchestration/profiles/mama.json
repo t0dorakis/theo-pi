@@ -5,6 +5,7 @@
   "localWorkspace": "/Users/minimi/dev/multi/projects/mutter-erbe",
   "remoteWorkspace": "/home/mama/workspaces/mutter-erbe",
   "agent": "codex",
+  "agentCommand": "npx @zed-industries/codex-acp@^0.16.0",
   "sessionMode": "persistent",
   "deploymentMode": "copy",
   "services": ["gateway", "telegram", "acp", "observatory"],

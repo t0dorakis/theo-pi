@@ -20,6 +20,7 @@ function makeEnv(stateDir: string, sessionMode: "oneshot" | "persistent" = "pers
   return {
     acpx: {
       agent: "pi",
+      agentCommand: undefined,
       sessionMode,
       cwd: undefined,
       stateDir: join(stateDir, "acp"),
