@@ -4,8 +4,7 @@
   "user": "minimi",
   "localWorkspace": "/Users/minimi/dev/theo-pi",
   "remoteWorkspace": "/home/minimi/workspaces/theo-pi",
-  "agent": "codex",
-  "agentCommand": "npx @zed-industries/codex-acp@^0.16.0",
+  "agent": "pi",
   "sessionMode": "persistent",
   "deploymentMode": "copy",
   "trustLevel": "orchestrator",
@@ -27,5 +26,6 @@
     }
   ],
   "services": ["gateway", "telegram", "acp", "observatory"],
-  "syncCodexAuth": true
+  "syncCodexAuth": true,
+  "syncPiAuth": true
 }

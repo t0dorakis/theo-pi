@@ -126,6 +126,19 @@ sync_codex_auth() {
   rm -rf "$tmp" "$archive"
 }
 
+sync_pi_auth() {
+  [[ "$(json_bool "$PROFILE_FILE" syncPiAuth)" == "true" ]] || return 0
+  [[ -f "$HOME/.pi/agent/auth.json" ]] || {
+    echo "skip pi auth sync: missing host ~/.pi/agent/auth.json" >&2
+    return 0
+  }
+  local remote_auth="/tmp/pi-orchestrator-pi-auth-$$-$RANDOM.json"
+  orbctl push -m "$VM" "$HOME/.pi/agent/auth.json" "$remote_auth" >/dev/null
+  local q_remote_auth
+  q_remote_auth="$(shell_quote "$remote_auth")"
+  run_vm "set -euo pipefail; mkdir -p ~/.pi/agent; mv $q_remote_auth ~/.pi/agent/auth.json; chmod 600 ~/.pi/agent/auth.json"
+}
+
 sync_himalaya_auth() {
   local cfg
   cfg="$(jq -c '.himalayaAuth // empty' "$PROFILE_FILE")"
@@ -255,6 +268,7 @@ redeploy_cmd() {
   install_runtime_links
   write_worker_env
   sync_codex_auth
+  sync_pi_auth
   sync_himalaya_auth
   if has_service gateway || has_service telegram; then
     PI_WORKER_VM_NAME="$VM" PI_WORKER_VM_REPO_DIR="$REMOTE_WORKSPACE" bash "$ROOT_DIR/scripts/vm/pi-worker-instance" restart all
