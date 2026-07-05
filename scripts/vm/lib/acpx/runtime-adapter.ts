@@ -283,12 +283,29 @@ export function createAcpxRuntimeAdapter(options: AcpxRuntimeAdapterOptions): Ac
     },
 
     async resetChatSession(chatId: string) {
+      const mod = await getMod()
       const runtime = await getRuntime()
       const sessionKey = `${options.agent}-${chatId}`
       const cached = handleCache.get(sessionKey)
       const handle = cached ?? await runtime.ensureSession({ sessionKey, agent: options.agent, mode: "persistent", cwd: options.cwd })
-      await runtime.close({ handle, reason: "worker reset", discardPersistentState: true })
-      handleCache.delete(sessionKey)
+      try {
+        await runtime.close({ handle, reason: "worker reset", discardPersistentState: true })
+      } catch (e) {
+        // Agents without ACP session/close (e.g. codex) throw before the
+        // record is flagged for reset, so the old session would be resumed
+        // on the next message. Flag the stored record directly instead.
+        if (!(e instanceof mod.AcpRuntimeError) || e.code !== "ACP_BACKEND_UNSUPPORTED_CONTROL") throw e
+        const store = mod.createFileSessionStore({ stateDir: options.acpxStateDir })
+        const record = await store.load(sessionKey)
+        if (record) {
+          record.acpx = { ...record.acpx, reset_on_next_ensure: true }
+          record.closed = true
+          record.closedAt = new Date().toISOString()
+          await store.save(record)
+        }
+      } finally {
+        handleCache.delete(sessionKey)
+      }
     },
   }
 }
