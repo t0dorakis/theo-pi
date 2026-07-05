@@ -249,7 +249,7 @@ redeploy_cmd() {
   (cd "$LOCAL_WORKSPACE" && COPYFILE_DISABLE=1 tar --exclude='.git' --exclude='node_modules' --exclude='**/node_modules' --exclude='.agent' -czf "$archive" .)
   chmod 600 "$archive"
   orbctl push -m "$VM" "$archive" "$remote_archive" >/dev/null
-  run_vm "set -euo pipefail; mkdir -p $q_remote; cd $q_remote; tar -xzf $q_archive; rm -f $q_archive; if [[ -f package.json ]]; then npm install; fi"
+  run_vm "set -euo pipefail; mkdir -p $q_remote; cd $q_remote; tar -xzf $q_archive; rm -f $q_archive; if [[ -f package.json ]]; then npm install; fi; if [[ -f .pi/npm/package.json ]]; then rm -rf .pi/npm/node_modules; (cd .pi/npm && npm install --no-audit --no-fund); fi"
   rm -f "$archive"
 
   # Current runtime is still carried by this orchestrator repo. Overlay scripts/vm when target workspace is not this repo.
@@ -258,10 +258,10 @@ redeploy_cmd() {
     runtime_archive="$(mktemp)"
     remote_runtime="/tmp/pi-orchestrator-${PROFILE}-runtime-$$-$RANDOM.tgz"
     q_runtime="$(shell_quote "$remote_runtime")"
-    (cd "$ROOT_DIR" && COPYFILE_DISABLE=1 tar -czf "$runtime_archive" scripts/vm packages/pi-caveman packages/pi-auto-skills packages/pi-task-loop .pi package.json package-lock.json 2>/dev/null || tar -czf "$runtime_archive" scripts/vm)
+    (cd "$ROOT_DIR" && COPYFILE_DISABLE=1 tar --exclude='.pi/npm/node_modules' -czf "$runtime_archive" scripts/vm packages/pi-caveman packages/pi-auto-skills packages/pi-task-loop .pi package.json package-lock.json 2>/dev/null || tar -czf "$runtime_archive" scripts/vm)
     chmod 600 "$runtime_archive"
     orbctl push -m "$VM" "$runtime_archive" "$remote_runtime" >/dev/null
-    run_vm "set -euo pipefail; cd $q_remote; tar -xzf $q_runtime; rm -f $q_runtime; if [[ -f package.json ]]; then npm install; fi"
+    run_vm "set -euo pipefail; cd $q_remote; tar -xzf $q_runtime; rm -f $q_runtime; if [[ -f package.json ]]; then npm install; fi; if [[ -f .pi/npm/package.json ]]; then rm -rf .pi/npm/node_modules; (cd .pi/npm && npm install --no-audit --no-fund); fi"
     rm -f "$runtime_archive"
   fi
 
