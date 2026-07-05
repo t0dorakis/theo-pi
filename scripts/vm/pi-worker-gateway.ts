@@ -209,8 +209,9 @@ async function handleTelegramCommand(message: TelegramMessage) {
 
   if (textValue === "/reset") {
     const cancelled = await requestCancelJobsForChat(String(chatId), env)
-    await resetWorkerChatSession(String(chatId), env)
-    await telegramSendMessage(chatId, `reset persistent acpx session${cancelled.length > 0 ? `; cancel requested for ${cancelled.length} running job(s)` : ""}`)
+    const { gitSync } = await resetWorkerChatSession(String(chatId), env)
+    const suffix = cancelled.length > 0 ? `; cancel requested for ${cancelled.length} running job(s)` : ""
+    await telegramSendMessage(chatId, `reset persistent acpx session${suffix}; workspace git sync ${gitSync.status}: ${gitSync.detail}`)
     return { ok: true }
   }
 
@@ -316,8 +317,8 @@ const server = Bun.serve({
           return json({ ok: false, error: "missing chatId" }, { status: 400 })
         }
         const cancelled = await requestCancelJobsForChat(chatId, env)
-        await resetWorkerChatSession(chatId, env)
-        return json({ ok: true, status: "reset", chatId, cancelled })
+        const { gitSync } = await resetWorkerChatSession(chatId, env)
+        return json({ ok: true, status: "reset", chatId, cancelled, gitSync })
       }
 
       if (request.method === "POST" && url.pathname === "/restart") {

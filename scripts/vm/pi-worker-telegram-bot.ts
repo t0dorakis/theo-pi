@@ -83,8 +83,11 @@ async function status() {
 
 async function reset(chatId: number) {
   const cancelled = await requestCancelJobsForChat(String(chatId), env)
-  await resetWorkerChatSession(String(chatId), env)
-  return `reset persistent acpx session${cancelled.length > 0 ? `; cancel requested for ${cancelled.length} queued/running job(s)` : ""}`
+  const { gitSync } = await resetWorkerChatSession(String(chatId), env)
+  const parts = ["reset persistent acpx session"]
+  if (cancelled.length > 0) parts.push(`cancel requested for ${cancelled.length} queued/running job(s)`)
+  parts.push(`workspace git sync ${gitSync.status}: ${gitSync.detail}`)
+  return parts.join("; ")
 }
 
 async function replyChunked(ctx: Context, text: string) {

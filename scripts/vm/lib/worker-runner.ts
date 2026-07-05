@@ -7,6 +7,7 @@ import { getWorkerEnv, type WorkerEnv } from "./env"
 import { createJobQueue } from "./jobs"
 import { getRuntimePaths } from "./paths"
 import { createResultChannel } from "./result-channel"
+import { syncWorkspaceToOrigin } from "./workspace-git"
 
 export type WorkerRunResult =
   | { status: "done"; answer: string; jobId: string; resultPath: string }
@@ -199,4 +200,7 @@ export async function getAcpxRuntimeHealth(env: WorkerEnv = getWorkerEnv()) {
 export async function resetWorkerChatSession(chatId: string, env: WorkerEnv = getWorkerEnv()) {
   const runtime = createAcpxRuntime(env)
   await runtime.resetChatSession(chatId)
+  // A reset means "clean slate": also bring the workspace to the latest
+  // pushed state so the next session never works on stale files.
+  return { gitSync: await syncWorkspaceToOrigin(env.acpx.cwd) }
 }
