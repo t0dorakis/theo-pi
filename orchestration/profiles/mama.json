@@ -9,7 +9,7 @@
   "deploymentMode": "copy",
   "services": ["gateway", "telegram", "acp", "observatory"],
   "syncCodexAuth": true,
-  "syncPiAuth": true,
+  "syncPiAuth": false,
   "himalayaAuth": {
     "account": "gmail",
     "email": "botrecht@gmail.com",
