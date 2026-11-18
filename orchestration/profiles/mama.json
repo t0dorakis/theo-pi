@@ -5,14 +5,23 @@
   "localWorkspace": "/Users/minimi/dev/multi/projects/mutter-erbe",
   "remoteWorkspace": "/home/mama/workspaces/mutter-erbe",
   "agent": "pi",
+  "model": "private/gpt-6.2-astra",
+  "thinkingLevel": "medium",
+  "caveman": false,
   "sessionMode": "persistent",
   "deploymentMode": "copy",
-  "services": ["gateway", "telegram", "acp", "observatory"],
+  "services": [
+    "gateway",
+    "telegram",
+    "acp",
+    "observatory"
+  ],
   "syncCodexAuth": true,
   "syncPiAuth": false,
   "himalayaAuth": {
     "account": "gmail",
     "email": "botrecht@gmail.com",
     "keychainService": "himalaya-botrecht"
-  }
+  },
+  "provider": "codex-private"
 }

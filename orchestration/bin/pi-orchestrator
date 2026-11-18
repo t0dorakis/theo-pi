@@ -195,13 +195,27 @@ EOF
 }
 
 install_runtime_links() {
-  local q_remote
+  local q_remote q_provider q_model q_thinking caveman
   q_remote="$(shell_quote "$REMOTE_WORKSPACE")"
+  q_provider="$(shell_quote "$(jq -r '.provider // "openai-codex"' "$PROFILE_FILE")")"
+  q_model="$(shell_quote "$(json_get "$PROFILE_FILE" model)")"
+  q_thinking="$(shell_quote "$(json_get "$PROFILE_FILE" thinkingLevel)")"
+  caveman="$(jq -r '.caveman // true' "$PROFILE_FILE")"
   run_vm "set -euo pipefail
     mkdir -p ~/bin ~/.pi/agent ~/.pi-worker
     cd $q_remote
-    if [[ -f .pi/settings.json ]]; then ln -sf $q_remote/.pi/settings.json ~/.pi/agent/settings.json; fi
-    if [[ -f packages/pi-caveman/APPEND_SYSTEM.md ]]; then cp $q_remote/packages/pi-caveman/APPEND_SYSTEM.md ~/.pi/agent/APPEND_SYSTEM.md; fi
+    if [[ -f .pi/settings.json ]]; then
+      cp .pi/settings.json ~/.pi/agent/settings.json.tmp
+      jq --arg provider $q_provider --arg model $q_model --arg thinking $q_thinking --argjson caveman $caveman '
+        if (\$model | length) > 0 then .defaultProvider = \$provider | .defaultModel = \$model else . end
+        | if (\$thinking | length) > 0 then .defaultThinkingLevel = \$thinking else . end
+        | if \$caveman then . else .packages = [(.packages // [])[] | select((type != \"string\") or (contains(\"pi-caveman\") | not))] end
+      ' ~/.pi/agent/settings.json.tmp > ~/.pi/agent/settings.json.rendered
+      rm -f ~/.pi/agent/settings.json
+      mv ~/.pi/agent/settings.json.rendered ~/.pi/agent/settings.json
+      rm ~/.pi/agent/settings.json.tmp
+    fi
+    if [[ $caveman == true && -f packages/pi-caveman/APPEND_SYSTEM.md ]]; then cp $q_remote/packages/pi-caveman/APPEND_SYSTEM.md ~/.pi/agent/APPEND_SYSTEM.md; else rm -f ~/.pi/agent/APPEND_SYSTEM.md; fi
     chmod +x scripts/vm/pi-worker-* scripts/vm/bootstrap-ubuntu-pi-worker.sh scripts/vm/install-theo-pi-worker.sh 2>/dev/null || true
     for cmd in pi-worker-supervisor pi-worker-start pi-worker-status pi-worker-restart pi-worker-stop pi-worker-checkpoint pi-worker-tail-logs pi-worker-verify-runtime pi-worker-fail-inject pi-worker-runtime-checklist pi-worker-submit-job pi-worker-run-job pi-worker-gateway pi-worker-telegram-bot pi-worker-telegram-runner pi-worker-acp pi-worker-verify.sh pi-worker-supervisor-smoke-test pi-worker-gateway-smoke-test pi-worker-acpx-smoke-test; do
       [[ -e $q_remote/scripts/vm/\"\$cmd\" ]] && ln -sf $q_remote/scripts/vm/\"\$cmd\" ~/bin/\"\$cmd\"
